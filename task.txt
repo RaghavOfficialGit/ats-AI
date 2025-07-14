@@ -1,0 +1,81 @@
+# === TASK 1: Resume Parsing API ===
+- Accepts uploaded resumes (PDF, DOCX, JPEG, PNG)
+- Input: Resume file, Tenant ID
+- Output: JSON with parsed data:
+    {
+        "name": "",
+        "email": "",
+        "phone": "",
+        "current_employer": "",
+        "current_job_title": "",
+        "location": "",
+        "education": [],
+        "skills": [],
+        "experience_summary": [
+            {
+                "company": "",
+                "role": "",
+                "duration": "",
+                "location": ""
+            }
+        ],
+        "summary": "<200 word overview"
+    }
+- Use FastAPI (Python) for backend
+- Extract data using Groq LLM and fallback to PDF parsers like PyMuPDF / pdfplumber / docx2txt
+- Store structured output in PostgreSQL (applicants table)
+- Create embedding with Groq API → Store in Milvus vector DB
+- Accessible from Next.js upload UI
+
+# === TASK 2: Job Description Parsing API ===
+- Accepts job description in text/email/pdf
+- Input: JD text, Tenant ID
+- Output: JSON with parsed fields:
+    {
+        "job_title": "",
+        "required_skills": [],
+        "nice_to_have_skills": [],
+        "experience_range": {
+            "min": "",
+            "max": ""
+        },
+        "location": "",
+        "client_project": "",
+        "employment_type": "",
+        "required_certifications": [],
+        "summary": "<200 word description",
+        "seo_description": "<SEO-optimized JD>"
+    }
+- Use FastAPI backend
+- Extract using Groq LLM
+- Store in PostgreSQL (jobs table)
+- Generate embeddings and store in Milvus
+- Accessible from Next.js JD upload interface
+
+# === TASK 3: Email Reader Background Job ===
+- Poll Gmail/Outlook for emails containing resumes or job descriptions
+- Parse using regex + LLM to identify if the email is a resume or JD
+- Call Task 1 or Task 2 APIs to process attachments/body
+- Avoid duplicates by checking email ID/resume hash
+- Create logs: subject, timestamp, type (job/candidate), ID created
+- Run as a scheduled background worker (e.g., cron on server or cloud function)
+
+# === TASK 4: Job-Candidate Matching API ===
+- Input: 
+    - JD object or job_id
+    - Resume object or candidate_id
+- Output:
+    {
+        "overall_score": 0-100,
+        "skills_match_score": 0-100,
+        "experience_match_score": 0-100,
+        "location_match_score": 0-100,
+        "match_summary": "LLM-generated explanation"
+    }
+- Use semantic similarity via Milvus vector store (FAISS fallback)
+- Compute scores:
+    - Skills match (70%)
+    - Experience match (20%)
+    - Location match (10%)
+- Use Groq LLM to generate human-readable match_summary
+- Available from either applicant or job view in frontend (Next.js)
