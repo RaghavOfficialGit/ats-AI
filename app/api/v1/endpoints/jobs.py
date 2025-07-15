@@ -48,6 +48,20 @@ async def update_job(job_id: str, job_data: Dict[str, Any], tenant_id: str = Que
         logger.error(f"Error updating job {job_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update job: {str(e)}")
 
+@router.get("/jobs/analytics", response_model=Dict[str, Any])
+async def get_job_analytics(
+    tenant_id: str = Query(...),
+    job_id: Optional[str] = Query(None)
+):
+    """Get analytics and insights for jobs"""
+    try:
+        logger.info(f"Getting job analytics for tenant: {tenant_id}")
+        result = await job_service.get_job_analytics(tenant_id, job_id)
+        return result
+    except Exception as e:
+        logger.error(f"Error getting job analytics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get analytics: {str(e)}")
+
 @router.get("/jobs/{job_id}", response_model=JobResponse)
 async def get_job(job_id: str, tenant_id: str = Query(...)):
     """Get a job by ID"""
@@ -165,20 +179,6 @@ async def delete_job(job_id: str, tenant_id: str = Query(...)):
     except Exception as e:
         logger.error(f"Error deleting job {job_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete job: {str(e)}")
-
-@router.get("/jobs/analytics", response_model=Dict[str, Any])
-async def get_job_analytics(
-    tenant_id: str = Query(...),
-    job_id: Optional[str] = Query(None)
-):
-    """Get analytics and insights for jobs"""
-    try:
-        logger.info(f"Getting job analytics for tenant: {tenant_id}")
-        result = await job_service.get_job_analytics(tenant_id, job_id)
-        return result
-    except Exception as e:
-        logger.error(f"Error getting job analytics: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get analytics: {str(e)}")
 
 # Legacy endpoints for backward compatibility
 @router.post("/job-description/parse", response_model=JobDescriptionResponse)

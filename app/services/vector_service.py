@@ -324,7 +324,7 @@ class VectorService:
                 return None
             
             # Search for the specific job
-            search_params = {"metric_type": "L2", "params": {"nprobe": 10}}
+            search_params = {"metric_type": "COSINE", "params": {"nprobe": 10}}
             
             # Query by job_id and tenant_id
             expr = f'job_id == "{job_id}" and tenant_id == "{tenant_id}"'
@@ -382,7 +382,7 @@ class VectorService:
             expr = " and ".join(expr_parts)
             
             # Perform vector search
-            search_params = {"metric_type": "L2", "params": {"nprobe": 10}}
+            search_params = {"metric_type": "COSINE", "params": {"nprobe": 10}}
             
             results = self.job_collection.search(
                 data=[search_vector.tolist()],
@@ -397,11 +397,13 @@ class VectorService:
             for hits in results:
                 for hit in hits:
                     try:
-                        metadata_str = hit.entity.get('full_metadata', '{}')
+                        # Access entity data directly from hit
+                        metadata_str = hit.entity.get('full_metadata') if hasattr(hit.entity, 'get') else hit.get('full_metadata', '{}')
                         metadata = json.loads(metadata_str) if metadata_str else {}
-                        job_results.append((metadata, hit.score))
-                    except json.JSONDecodeError:
-                        logger.warning(f"Failed to parse metadata for job {hit.entity.get('job_id')}")
+                        score = hit.score if hasattr(hit, 'score') else hit.get('score', 0.0)
+                        job_results.append((metadata, score))
+                    except (json.JSONDecodeError, AttributeError) as e:
+                        logger.warning(f"Failed to parse metadata for job: {str(e)}")
                         continue
             
             logger.info(f"Found {len(job_results)} jobs matching criteria")

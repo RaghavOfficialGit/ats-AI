@@ -71,6 +71,7 @@ class JobService:
                 )
                 processed_data['embedding_id'] = embedding_id
                 processed_data['cluster_id'] = embedding_id  # Link to Vector database
+                processed_data['job_id'] = job_id  # Add job_id to response
             
             logger.info(f"Successfully created job {job_id} for tenant {job_data.tenant_id}")
             return JobResponse(**processed_data)
