@@ -2,9 +2,10 @@ import logging
 from typing import List, Tuple, Optional, Dict, Any
 from pymilvus import connections, Collection, CollectionSchema, FieldSchema, DataType, utility
 import numpy as np
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer  # Commented out - using Mistral now
 import uuid
 import json
+import httpx
 
 from app.core.config import settings
 
@@ -17,8 +18,10 @@ class VectorService:
         self.resume_collection = None
         self.job_collection = None
         self._connected = False
-        # Initialize embedding model for text-to-vector conversion
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        # OLD: Initialize embedding model for text-to-vector conversion (SentenceTransformers)
+        # self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        
+        # NEW: Using Mistral API for embeddings (no local model needed)
         
     async def connect(self):
         """Connect to Milvus Cloud (Zilliz)"""
@@ -75,7 +78,7 @@ class VectorService:
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
             FieldSchema(name="vector_id", dtype=DataType.VARCHAR, max_length=100),
             FieldSchema(name="candidate_id", dtype=DataType.VARCHAR, max_length=100),
-            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=384),  # MiniLM model dimension
+            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1024),  # Mistral model dimension
             FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=200),
             FieldSchema(name="skills", dtype=DataType.VARCHAR, max_length=2000),
             FieldSchema(name="location", dtype=DataType.VARCHAR, max_length=200),
@@ -114,7 +117,7 @@ class VectorService:
             FieldSchema(name="id", dtype=DataType.VARCHAR, max_length=100),  # embedding_id
             FieldSchema(name="job_id", dtype=DataType.VARCHAR, max_length=100),  # job_id
             FieldSchema(name="tenant_id", dtype=DataType.VARCHAR, max_length=100),  # tenant_id
-            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=384),  # MiniLM model dimension
+            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1024),  # Mistral model dimension
             
             # Basic job information (searchable fields)
             FieldSchema(name="title", dtype=DataType.VARCHAR, max_length=300),  # job_title
@@ -154,14 +157,55 @@ class VectorService:
         logger.info(f"Created comprehensive job collection '{collection_name}' with {len(fields)} fields")
     
     def _generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding vector from text"""
+        """Generate embedding vector from text using Mistral API"""
         try:
-            # Use sentence transformer to generate embedding
-            embedding = self.embedding_model.encode(text, normalize_embeddings=True)
-            return embedding.tolist()
+            # NEW: Use Mistral API for embeddings
+            return self._generate_mistral_embedding(text)
         except Exception as e:
             logger.error(f"Failed to generate embedding: {str(e)}")
             raise
+    
+    def _generate_mistral_embedding(self, text: str) -> List[float]:
+        """Generate embedding using Mistral API"""
+        try:
+            import requests
+            
+            response = requests.post(
+                "https://api.mistral.ai/v1/embeddings",
+                headers={
+                    "Authorization": f"Bearer {settings.MISTRAL_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "mistral-embed",
+                    "input": [text]
+                },
+                timeout=30
+            )
+            
+            if response.status_code != 200:
+                raise Exception(f"Mistral API error: {response.status_code} - {response.text}")
+            
+            data = response.json()
+            embedding = data["data"][0]["embedding"]
+            
+            logger.info(f"Generated Mistral embedding with {len(embedding)} dimensions")
+            return embedding
+            
+        except Exception as e:
+            logger.error(f"Error generating Mistral embedding: {str(e)}")
+            raise
+    
+    # OLD: Generate embedding vector from text using SentenceTransformers (COMMENTED OUT)
+    # def _generate_embedding_old(self, text: str) -> List[float]:
+    #     """Generate embedding vector from text using local SentenceTransformers"""
+    #     try:
+    #         # Use sentence transformer to generate embedding
+    #         embedding = self.embedding_model.encode(text, normalize_embeddings=True)
+    #         return embedding.tolist()
+    #     except Exception as e:
+    #         logger.error(f"Failed to generate embedding: {str(e)}")
+    #         raise
     
     async def store_resume_embedding(
         self, 
@@ -255,9 +299,9 @@ class VectorService:
             # Prepare embedding vector
             vector = np.array(embedding, dtype=np.float32)
             if vector.shape[0] != settings.EMBEDDING_DIMENSION:
-                # Use our embedding model to generate proper dimension
+                # Use our embedding API to generate proper dimension
                 if metadata and metadata.get('job_description'):
-                    vector = self.embedding_model.encode([metadata['job_description']])[0]
+                    vector = np.array(self._generate_embedding(metadata['job_description']), dtype=np.float32)
                 else:
                     logger.warning(f"Embedding dimension mismatch. Expected {settings.EMBEDDING_DIMENSION}, got {vector.shape[0]}")
             

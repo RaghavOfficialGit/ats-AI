@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # Groq
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     
+    # Mistral AI
+    MISTRAL_API_KEY: str = os.getenv("MISTRAL_API_KEY", "")
+    
     # Email - ON HOLD FOR NOW
     # Focus on core parsing APIs first, email integration later
     # GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
@@ -42,10 +45,10 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", "4194304"))  # 4MB
     ALLOWED_FILE_TYPES: List[str] = ["pdf", "docx", "jpeg", "jpg", "png"]
     
-    # Vector Collections
-    RESUME_COLLECTION_NAME: str = os.getenv("RESUME_COLLECTION_NAME", "resume_embeddings")
-    JOB_COLLECTION_NAME: str = os.getenv("JOB_COLLECTION_NAME", "job_embeddings")
-    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "384"))  # all-MiniLM-L6-v2 dimension
+    # Vector Collections - Updated for Mistral embeddings
+    RESUME_COLLECTION_NAME: str = os.getenv("RESUME_COLLECTION_NAME", "resume_embeddings_mistral")
+    JOB_COLLECTION_NAME: str = os.getenv("JOB_COLLECTION_NAME", "job_embeddings_mistral")
+    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "1024"))  # Mistral embedding dimension
     
     # Scoring Weights
     SKILLS_MATCH_WEIGHT: float = float(os.getenv("SKILLS_MATCH_WEIGHT", "0.7"))
