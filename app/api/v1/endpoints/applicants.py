@@ -3,7 +3,7 @@ Applicant API endpoints for comprehensive applicant management.
 Handles CRUD operations, search, filtering, and analytics.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Dict, Any, Optional
 from app.models.applicant import (
     ApplicantCreateRequest, ApplicantUpdateRequest, ApplicantResponse,
@@ -13,7 +13,6 @@ from app.models.applicant import (
 from app.services.applicant_service import ApplicantService
 from app.services.vector_service import VectorService
 from app.services.groq_service import GroqService
-from app.services.file_processors import FileProcessor
 import logging
 
 logger = logging.getLogger(__name__)
@@ -184,69 +183,7 @@ async def enhance_applicant_profile(
         logger.error(f"Error enhancing applicant profile: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error enhancing applicant profile: {str(e)}")
 
-@router.post("/applicants/upload-resume", response_model=ApplicantResponse)
-async def upload_resume_create_applicant(
-    file: UploadFile = File(...),
-    tenant_id: str = Query(..., description="Tenant ID"),
-    created_by: str = Query("system", description="User who created the applicant"),
-    applicant_service: ApplicantService = Depends(get_applicant_service)
-):
-    """Upload a resume file and create applicant profile from parsed data"""
-    try:
-        # Validate file type
-        if not file.filename.lower().endswith(('.pdf', '.docx', '.doc')):
-            raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported")
-        
-        # Read file content
-        content = await file.read()
-        
-        # Initialize file processor
-        file_processor = FileProcessor()
-        
-        # Get file extension
-        file_extension = file.filename.lower().split('.')[-1]
-        
-        # Process file based on type
-        if file_extension == 'pdf':
-            extracted_text = await file_processor._extract_pdf_text(content)
-        elif file_extension in ['docx', 'doc']:
-            extracted_text = await file_processor._extract_docx_text(content)
-        else:
-            raise HTTPException(status_code=400, detail="Unsupported file format")
-        
-        # Get Groq service for parsing
-        vector_service = VectorService()
-        groq_service = GroqService()
-        
-        # Parse resume using AI
-        parsed_data = await groq_service.parse_resume_comprehensive(extracted_text)
-        
-        # Convert parsed data to applicant create request
-        applicant_data = ApplicantCreateRequest(
-            tenant_id=tenant_id,
-            first_name=parsed_data.get("first_name", ""),
-            last_name=parsed_data.get("last_name", ""),
-            email_id=parsed_data.get("email", ""),
-            primary_telephone=parsed_data.get("phone", ""),
-            city=parsed_data.get("city", ""),
-            state=parsed_data.get("state", ""),
-            current_last_job=parsed_data.get("current_job_title", ""),
-            experience_years=parsed_data.get("experience_years", 0),
-            education=parsed_data.get("education", []),
-            professional_certifications=parsed_data.get("certifications", []),
-            languages=parsed_data.get("languages", []),
-            applicant_status="New",
-            applicant_source="Resume Upload"
-        )
-        
-        # Create applicant
-        return await applicant_service.create_applicant(applicant_data, created_by)
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error uploading resume: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing resume: {str(e)}")
+
 
 # Legacy endpoints for backward compatibility with existing resume APIs
 @router.get("/resumes", response_model=ResumeListResponse)
