@@ -99,7 +99,6 @@ def make_simple_request(method, endpoint, **kwargs):
 def main():
     st.title("🤖 AI Recruitment Platform - Simple Tester")
     st.markdown("**Easy testing interface for all platform endpoints**")
-    st.info("✨ **Now powered by Mistral AI Embeddings** - 1024-dimensional vectors for superior matching!")
     
     # Server status check
     st.subheader("🔗 Server Status")
@@ -121,10 +120,6 @@ def main():
     
     # Test Categories
     st.sidebar.title("🧪 Test Categories")
-    
-    # Embedding info in sidebar
-    st.sidebar.info("🤖 **Mistral AI Embeddings**\n- Model: mistral-embed\n- Dimensions: 1024\n- Collections: *_mistral")
-    
     test_type = st.sidebar.radio(
         "Choose test type:",
         [
@@ -132,6 +127,7 @@ def main():
             "📄 Resume Testing", 
             "💼 Job Management",
             "🔍 Search & Analytics",
+            "🤖 Mistral Embeddings",
             "🚀 Full Test Suite"
         ]
     )
@@ -208,9 +204,9 @@ def main():
                     st.error(f"❌ Sample file '{sample_file}' not found")
         
         with col2:
-            if st.button("🧪 Test Applicant Management", key="test_applicants"):
-                with st.spinner("Running applicant management tests..."):
-                    result = run_test_script("tests/test_comprehensive_applicants.py")
+            if st.button("🧪 Run Resume Debug Script", key="debug_resume"):
+                with st.spinner("Running resume debug script..."):
+                    result = run_test_script("tests/debug_resume.py")
                     display_test_output(result)
         
         # File upload test
@@ -241,7 +237,6 @@ def main():
     # Job Management
     elif test_type == "💼 Job Management":
         st.header("💼 Job Management Tests")
-        st.info("🤖 All jobs now use **Mistral AI embeddings** for better semantic matching!")
         
         # Quick job creation
         st.subheader("➕ Quick Job Creation")
@@ -284,7 +279,7 @@ def main():
         # Job operations
         st.subheader("🔍 Job Operations")
         
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             if st.button("📋 List Jobs", key="list_jobs"):
@@ -307,13 +302,7 @@ def main():
                         st.error(f"❌ Analytics failed: {response.get('error', 'Unknown error')}")
         
         with col3:
-            if st.button("� Verify Mistral", key="verify_mistral_job"):
-                with st.spinner("Verifying Mistral embeddings..."):
-                    result = run_test_script("tests/test_mistral_verification.py")
-                    display_test_output(result)
-        
-        with col4:
-            if st.button("🧪 Full Job Test", key="comprehensive_job"):
+            if st.button("🧪 Run Comprehensive Job Test", key="comprehensive_job"):
                 with st.spinner("Running comprehensive job tests..."):
                     result = run_test_script("tests/test_comprehensive_jobs.py")
                     display_test_output(result)
@@ -321,7 +310,6 @@ def main():
     # Search & Analytics
     elif test_type == "🔍 Search & Analytics":
         st.header("🔍 Search & Analytics Tests")
-        st.info("🎯 Search powered by **Mistral AI embeddings** for accurate semantic matching!")
         
         # Job search
         st.subheader("🎯 Job Search")
@@ -383,19 +371,83 @@ def main():
                     else:
                         st.error(f"❌ Analytics failed: {response.get('error', 'Unknown error')}")
     
+    # Mistral Embeddings Testing
+    elif test_type == "🤖 Mistral Embeddings":
+        st.header("🤖 Mistral Embeddings Tests")
+        
+        st.info("**Test the new Mistral API integration for vector embeddings**")
+        
+        # Mistral API Test
+        st.subheader("🧪 Mistral API Tests")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔍 Test Mistral Integration", key="test_mistral"):
+                with st.spinner("Running Mistral API test..."):
+                    result = run_test_script("tests/test_mistral.py")
+                    display_test_output(result)
+        
+        with col2:
+            if st.button("✅ Verify Mistral Embeddings", key="verify_mistral"):
+                with st.spinner("Running Mistral verification test..."):
+                    result = run_test_script("tests/test_mistral_verification.py")
+                    display_test_output(result)
+        
+        # Embedding Dimension Info
+        st.subheader("📊 Embedding Information")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Embedding Model", "Mistral Embed")
+        with col2:
+            st.metric("Dimensions", "1024")
+        with col3:
+            st.metric("API Provider", "Mistral AI")
+        
+        # Configuration Status
+        st.subheader("⚙️ Configuration Status")
+        
+        # Check environment variables
+        import os
+        mistral_key = os.getenv('MISTRAL_API_KEY')
+        
+        if mistral_key:
+            st.success(f"✅ MISTRAL_API_KEY configured: {mistral_key[:10]}...")
+        else:
+            st.error("❌ MISTRAL_API_KEY not found in environment")
+        
+        # Collection information
+        st.info("**Vector Collections:**")
+        st.write("- Resume Collection: `resume_embeddings_mistral`")
+        st.write("- Job Collection: `job_embeddings_mistral`")
+        st.write("- Vector Dimension: 1024 (Mistral standard)")
+        
+        # Migration status
+        st.subheader("🔄 Migration Status")
+        st.success("✅ **Migration Complete**: SentenceTransformers → Mistral API")
+        st.write("**Changes made:**")
+        st.write("- ✅ Updated vector service to use Mistral API")
+        st.write("- ✅ Changed embedding dimensions from 384 to 1024")
+        st.write("- ✅ Created new Milvus collections with `_mistral` suffix")
+        st.write("- ✅ Commented out old SentenceTransformers code")
+        st.write("- ✅ Updated configuration files")
+    
     # Full Test Suite
     elif test_type == "🚀 Full Test Suite":
         st.header("🚀 Complete Test Suite")
         
         st.info("**Run comprehensive tests using all available test scripts**")
         
-        # Available test scripts (Essential only)
+        # Available test scripts
         test_scripts = [
-            ("tests/test_job_creation.py", "💼 Job Creation Test", "Test job creation with Mistral embeddings"),
+            ("tests/debug_resume.py", "📄 Resume Debug Test", "Test resume parsing with debug output"),
+            ("tests/test_job_creation.py", "💼 Job Creation Test", "Test job creation endpoint"),
             ("tests/test_comprehensive_jobs.py", "🏢 Comprehensive Job Test", "Test all job management features"),
             ("tests/test_comprehensive_applicants.py", "👥 Applicant Management Test", "Test applicant management features"),
-            ("tests/test_mistral_verification.py", "🤖 Mistral Verification", "Verify Mistral embeddings are working correctly"),
-            ("tests/test_connections.py", "🔗 Database Connections", "Test Milvus and PostgreSQL connections")
+            ("tests/test_mistral.py", "🤖 Mistral API Test", "Test Mistral embeddings integration"),
+            ("tests/test_mistral_verification.py", "🔍 Mistral Verification", "Verify Mistral embeddings are working correctly"),
+            ("tests/test_connections.py", "🔗 Database Connections", "Test Milvus and PostgreSQL connections"),
+            ("tests/test_apis.py", "🌐 API Tests", "Test resume and job parsing APIs")
         ]
         
         st.subheader("📋 Available Test Scripts")

@@ -21,7 +21,7 @@ A production-ready, cloud-native recruitment platform built with FastAPI, Milvus
 - **Vector Search**: `GET /api/v1/jobs/search`
 - **Health Check**: `GET /health`
 
-## 📁 Project Structure full
+## 📁 Project Structure
 
 ```
 ├── app/                    # Main application code
@@ -29,21 +29,8 @@ A production-ready, cloud-native recruitment platform built with FastAPI, Milvus
 │   ├── core/              # Configuration and utilities
 │   ├── models/            # Data models
 │   └── services/          # Business logic
-├── docs/                  # 📚 Essential documentation (7 files)
-│   ├── CLIENT_REQUIREMENTS.md
-│   ├── CORE_APIS_PHASE1.md
-│   ├── DEVELOPMENT.md
-│   ├── project-overview.md
-│   ├── database_schema.sql
-│   ├── task.txt
-│   └── README.md
-├── tests/                 # 🧪 Essential test scripts (6 files)
-│   ├── test_job_creation.py
-│   ├── test_comprehensive_jobs.py
-│   ├── test_comprehensive_applicants.py
-│   ├── test_connections.py
-│   ├── test_mistral_verification.py
-│   └── README.md
+├── docs/                  # 📚 All documentation
+├── tests/                 # 🧪 All test scripts
 ├── .env                   # Environment variables
 └── requirements.txt       # Dependencies
 ```

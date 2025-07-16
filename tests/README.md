@@ -1,17 +1,23 @@
 # Test Scripts
 
-This folder contains essential test scripts for the AI-powered recruitment platform.
+This folder contains all test scripts for the AI-powered recruitment platform.
 
 ## Test Files
 
-### Core Tests
-- **`test_job_creation.py`** - Tests job creation with Mistral embeddings
+### Core API Tests
+- **`test_apis.py`** - Tests for resume parsing and job description parsing APIs
+- **`test_connections.py`** - Tests for Milvus and PostgreSQL database connections
+- **`test_milvus_connection.py`** - Specific Milvus connection test
+- **`test_milvus_simple.py`** - Simple Milvus operations test
+
+### Feature-Specific Tests
+- **`test_job_creation.py`** - Tests job creation with vector embeddings
+- **`test_mistral.py`** - Tests Mistral API integration for embeddings
 - **`test_comprehensive_jobs.py`** - Comprehensive job management tests
 - **`test_comprehensive_applicants.py`** - Comprehensive applicant management tests
 
-### Infrastructure Tests
-- **`test_connections.py`** - Tests for Milvus and PostgreSQL database connections
-- **`test_mistral_verification.py`** - Verifies Mistral API integration and embeddings
+### Debug Scripts
+- **`debug_resume.py`** - Debug script for resume parsing with detailed logging
 
 ## Running Tests
 
@@ -22,25 +28,16 @@ To run the tests, make sure you have:
 
 Then run individual tests:
 ```bash
-python tests/test_job_creation.py
+python tests/test_apis.py
 python tests/test_connections.py
-python tests/test_mistral_verification.py
-python tests/test_comprehensive_jobs.py
-python tests/test_comprehensive_applicants.py
+python tests/test_mistral.py
+# etc.
 ```
 
 ## Environment Requirements
 
 Make sure these environment variables are set in your `.env` file:
-- `MISTRAL_API_KEY` - For Mistral embeddings (required)
+- `MISTRAL_API_KEY` - For Mistral embeddings
 - `GROQ_API_KEY` - For LLM operations
 - `MILVUS_*` variables - For Milvus/Zilliz Cloud connection
 - `DATABASE_URL` - For PostgreSQL (optional)
-
-## Mistral Embeddings (Default)
-
-All tests now use **Mistral AI embeddings** by default:
-- **Model**: `mistral-embed`
-- **Dimensions**: 1024
-- **Collections**: `*_mistral` suffix
-- **API**: Mistral AI API integration
