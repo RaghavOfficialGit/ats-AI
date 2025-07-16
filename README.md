@@ -2,6 +2,8 @@
 
 A production-ready, cloud-native recruitment platform built with FastAPI, Milvus (Zilliz Cloud), Groq LLM, and Mistral embeddings.
 
+> **🧹 Clean & Organized**: All test files are in `/tests/`, documentation in `/docs/`, and only essential files in the root directory.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -29,8 +31,21 @@ A production-ready, cloud-native recruitment platform built with FastAPI, Milvus
 │   ├── core/              # Configuration and utilities
 │   ├── models/            # Data models
 │   └── services/          # Business logic
-├── docs/                  # 📚 All documentation
-├── tests/                 # 🧪 All test scripts
+├── docs/                  # 📚 Essential documentation (7 files)
+│   ├── CLIENT_REQUIREMENTS.md
+│   ├── CORE_APIS_PHASE1.md
+│   ├── DEVELOPMENT.md
+│   ├── project-overview.md
+│   ├── database_schema.sql
+│   ├── task.txt
+│   └── README.md
+├── tests/                 # 🧪 Essential test scripts (6 files)
+│   ├── test_job_creation.py
+│   ├── test_comprehensive_jobs.py
+│   ├── test_comprehensive_applicants.py
+│   ├── test_connections.py
+│   ├── test_mistral_verification.py
+│   └── README.md
 ├── .env                   # Environment variables
 └── requirements.txt       # Dependencies
 ```
@@ -45,12 +60,11 @@ A production-ready, cloud-native recruitment platform built with FastAPI, Milvus
 
 ## 📚 Documentation
 
-All detailed documentation is available in the [`docs/`](./docs/) folder:
+All essential documentation is available in the [`docs/`](./docs/) folder:
 
 - **[Project Overview](./docs/project-overview.md)** - Complete project architecture
 - **[Development Guide](./docs/DEVELOPMENT.md)** - Development setup and guidelines
 - **[API Documentation](./docs/CORE_APIS_PHASE1.md)** - API endpoints and usage
-- **[Cloud Setup](./docs/CLOUD_SETUP.md)** - Cloud deployment instructions
 - **[Client Requirements](./docs/CLIENT_REQUIREMENTS.md)** - Project requirements
 
 ## 🧪 Testing
@@ -58,9 +72,9 @@ All detailed documentation is available in the [`docs/`](./docs/) folder:
 Test scripts are organized in the [`tests/`](./tests/) folder. See [`tests/README.md`](./tests/README.md) for details.
 
 ```bash
-# Run individual tests
-python tests/test_apis.py
-python tests/test_mistral.py
+# Run essential tests
+python tests/test_job_creation.py
+python tests/test_mistral_verification.py
 python tests/test_connections.py
 ```
 
