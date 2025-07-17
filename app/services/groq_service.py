@@ -3,29 +3,32 @@ import logging
 from typing import Dict, List, Optional
 from groq import Groq
 import asyncio
-import torch
-from transformers import AutoTokenizer, AutoModel
+import httpx
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 class GroqService:
-    """Service for interacting with Groq API"""
+    """Service for interacting with Groq API and Mistral embeddings"""
     
     def __init__(self):
-        self.client = Groq(api_key=settings.GROQ_API_KEY)
+        self.groq_api_key = settings.GROQ_API_KEY
+        self.client = Groq(api_key=self.groq_api_key) if self.groq_api_key else None
         self.model = "llama3-8b-8192"  # Default model
         
-        # Initialize embedding model (Hugging Face Transformers)
-        self.embedding_model_name = "sentence-transformers/all-MiniLM-L6-v2"
-        self.tokenizer = None
-        self.embedding_model = None
-        self._embedding_initialized = False
+        # Mistral API configuration for embeddings
+        self.mistral_api_key = settings.MISTRAL_API_KEY
+        self.mistral_embedding_model = "mistral-embed"
+        self.mistral_base_url = "https://api.mistral.ai/v1"
         
     async def generate_completion(self, prompt: str) -> str:
         """Generate completion using Groq LLM"""
         try:
+            # Check if API key is available
+            if not self.groq_api_key or not self.client:
+                raise Exception("Groq API key not configured. Please set GROQ_API_KEY in environment variables.")
+            
             logger.info(f"Sending request to Groq API. Prompt length: {len(prompt)} characters")
             logger.info(f"Using model: {self.model}")
             
@@ -81,7 +84,24 @@ class GroqService:
         
         {text_content}
         
-        Return only valid JSON with fields: title, skills, requirements, location, experience.
+        Return only valid JSON with these exact fields:
+        {{
+            "job_title": "Job title/position name",
+            "required_skills": ["skill1", "skill2", "skill3"],
+            "nice_to_have_skills": ["skill1", "skill2"],
+            "experience_range": {{
+                "min": 0,
+                "max": 10
+            }},
+            "location": "Job location/city",
+            "client_project": "Client or project name",
+            "employment_type": "Full-time",
+            "required_certifications": ["cert1", "cert2"],
+            "summary": "Brief job description summary",
+            "seo_description": "SEO-friendly description"
+        }}
+        
+        Extract all required skills, experience range, and other details. Use null for missing information.
         """
         
         response = await self.generate_completion(prompt)
@@ -95,58 +115,45 @@ class GroqService:
             logger.error(f"Error parsing job description with Groq: {str(e)}")
             raise
     
-    def _initialize_embedding_model(self):
-        """Initialize the embedding model and tokenizer"""
-        if not self._embedding_initialized:
-            try:
-                logger.info(f"Initializing embedding model: {self.embedding_model_name}")
-                self.tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_name)
-                self.embedding_model = AutoModel.from_pretrained(self.embedding_model_name)
-                
-                # Set model to evaluation mode
-                self.embedding_model.eval()
-                
-                self._embedding_initialized = True
-                logger.info("Embedding model initialized successfully")
-                
-            except Exception as e:
-                logger.error(f"Failed to initialize embedding model: {str(e)}")
-                raise Exception(f"Embedding model initialization failed: {str(e)}")
-    
     async def generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding for text using Hugging Face Transformers"""
+        """Generate embedding for text using Mistral API"""
         try:
-            # Initialize model if not already done
-            if not self._embedding_initialized:
-                self._initialize_embedding_model()
+            if not self.mistral_api_key:
+                raise Exception("Mistral API key not configured. Please set MISTRAL_API_KEY in environment variables.")
             
-            # Tokenize the input text
-            inputs = self.tokenizer(
-                text, 
-                return_tensors='pt', 
-                truncation=True, 
-                padding=True, 
-                max_length=512  # Standard max length for sentence transformers
-            )
+            headers = {
+                "Authorization": f"Bearer {self.mistral_api_key}",
+                "Content-Type": "application/json"
+            }
             
-            # Generate embeddings
-            with torch.no_grad():
-                outputs = self.embedding_model(**inputs)
+            payload = {
+                "model": self.mistral_embedding_model,
+                "input": [text]
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.mistral_base_url}/embeddings",
+                    headers=headers,
+                    json=payload,
+                    timeout=30.0
+                )
                 
-                # Use mean pooling on the token embeddings
-                embeddings = outputs.last_hidden_state.mean(dim=1)
+                response.raise_for_status()
+                result = response.json()
                 
-                # Normalize the embeddings (optional but recommended)
-                embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
-            
-            # Convert to list and return
-            embedding_list = embeddings[0].tolist()
-            
-            logger.info(f"Generated embedding with dimension: {len(embedding_list)}")
-            return embedding_list
-            
+                if "data" in result and len(result["data"]) > 0:
+                    embedding = result["data"][0]["embedding"]
+                    logger.info(f"Generated Mistral embedding with dimension: {len(embedding)}")
+                    return embedding
+                else:
+                    raise Exception("Invalid response format from Mistral API")
+                    
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Mistral API HTTP error: {e.response.status_code} - {e.response.text}")
+            raise Exception(f"Mistral API request failed: {e.response.status_code}")
         except Exception as e:
-            logger.error(f"Error generating embedding: {str(e)}")
+            logger.error(f"Error generating Mistral embedding: {str(e)}")
             raise Exception(f"Failed to generate embedding: {str(e)}")
     
     async def generate_match_summary(self, job_data: Dict, resume_data: Dict, scores: Dict) -> str:

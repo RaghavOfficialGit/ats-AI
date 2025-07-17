@@ -27,7 +27,24 @@ class FileProcessor:
                 return await self._extract_image_text(content)
             elif file_extension == 'txt':
                 logger.info("Processing text file...")
-                text = content.decode('utf-8')
+                try:
+                    # Try UTF-8 first
+                    text = content.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        # Try latin-1 as fallback
+                        text = content.decode('latin-1')
+                        logger.info("Used latin-1 encoding for text file")
+                    except UnicodeDecodeError:
+                        try:
+                            # Try cp1252 as another fallback
+                            text = content.decode('cp1252')
+                            logger.info("Used cp1252 encoding for text file")
+                        except UnicodeDecodeError:
+                            # Final fallback with error handling
+                            text = content.decode('utf-8', errors='ignore')
+                            logger.warning("Used UTF-8 with ignored errors for text file")
+                
                 logger.info(f"Extracted {len(text)} characters from text file")
                 return text
             else:

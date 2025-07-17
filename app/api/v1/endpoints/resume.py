@@ -18,7 +18,7 @@ router = APIRouter()
 
 # Initialize services
 groq_service = GroqService()
-vector_service = VectorService()
+vector_service = VectorService.create_with_groq(groq_service)
 file_processor = FileProcessor()
 
 @router.post("/parse")

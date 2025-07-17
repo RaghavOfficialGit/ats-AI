@@ -349,22 +349,111 @@ async def filter_applicants_by_experience(
 async def get_applicant_recommendations_for_job(
     job_id: str,
     tenant_id: str = Query(..., description="Tenant ID"),
-    limit: int = Query(10, ge=1, le=50),
-    applicant_service: ApplicantService = Depends(get_applicant_service)
+    limit: int = Query(10, ge=1, le=50)
 ):
     """Get applicant recommendations for a specific job"""
     try:
-        # This would integrate with the job service to get job details
-        # and find matching applicants based on requirements
-        # For now, return top applicants by experience
+        # Create vector service to search resumes directly
+        vector_service = VectorService()
+        await vector_service.connect()
         
-        search_request = ApplicantSearchRequest(
-            tenant_id=tenant_id,
-            query=job_id,  # Basic implementation
+        # Search all resumes (candidates) - we'll use empty filter since we don't have tenant filtering in resume collection
+        results = await vector_service.search_with_filter(
+            "resume_embeddings_mistral", 
+            query_embedding=None,  # No vector search, just get all
+            filter_expr="",  # No filter for now
             limit=limit
         )
         
-        return await applicant_service.search_applicants(search_request)
+        # Convert resume results to candidate format
+        candidates = []
+        for result in results:
+            try:
+                # Create candidate response from resume data
+                candidate = {
+                    "candidate_id": result.get("candidate_id", "unknown"),
+                    "name": result.get("name", "N/A"),
+                    "current_job_title": result.get("current_job_title", "N/A"),
+                    "current_employer": result.get("current_employer", "N/A"),
+                    "location": result.get("location", "N/A"),
+                    "skills": result.get("skills", "").split(", ") if result.get("skills") else [],
+                    "email": "N/A",  # Not stored in resume collection
+                    "telephone": "N/A",  # Not stored in resume collection
+                }
+                candidates.append(candidate)
+            except Exception as e:
+                logger.warning(f"Error processing resume result: {str(e)}")
+                continue
+        
+        return candidates
+        
     except Exception as e:
         logger.error(f"Error getting recommendations: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error getting recommendations: {str(e)}")
+
+@router.post("/applicants/search")
+async def search_applicants_endpoint(
+    search_request: dict,
+    tenant_id: str = Query(..., description="Tenant ID"),
+    limit: int = Query(10, ge=1, le=50)
+):
+    """Search applicants/candidates"""
+    try:
+        # Create vector service to search resumes directly
+        vector_service = VectorService()
+        await vector_service.connect()
+        
+        # Search all resumes (candidates) - we'll use empty filter since we don't have tenant filtering in resume collection
+        results = await vector_service.search_with_filter(
+            "resume_embeddings_mistral", 
+            query_embedding=None,  # No vector search, just get all
+            filter_expr="",  # No filter for now
+            limit=limit
+        )
+        
+        # Convert resume results to candidate format
+        candidates = []
+        for result in results:
+            try:
+                # Create candidate response from resume data
+                candidate = {
+                    "candidate_id": result.get("candidate_id", "unknown"),
+                    "name": result.get("name", "N/A"),
+                    "current_job_title": result.get("current_job_title", "N/A"),
+                    "current_employer": result.get("current_employer", "N/A"),
+                    "location": result.get("location", "N/A"),
+                    "skills": result.get("skills", "").split(", ") if result.get("skills") else [],
+                    "email": "N/A",  # Not stored in resume collection
+                    "telephone": "N/A",  # Not stored in resume collection
+                }
+                candidates.append(candidate)
+            except Exception as e:
+                logger.warning(f"Error processing resume result: {str(e)}")
+                continue
+        
+        return candidates
+        
+    except Exception as e:
+        logger.error(f"Error searching applicants: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error searching applicants: {str(e)}")
+
+# Legacy endpoint using the complex applicant service (commented out for now)
+# @router.get("/applicants/recommendations/{job_id}")
+# async def get_applicant_recommendations_for_job_legacy(
+#     job_id: str,
+#     tenant_id: str = Query(..., description="Tenant ID"),
+#     limit: int = Query(10, ge=1, le=50),
+#     applicant_service: ApplicantService = Depends(get_applicant_service)
+# ):
+#     """Get applicant recommendations for a specific job"""
+#     try:
+#         search_request = ApplicantSearchRequest(
+#             tenant_id=tenant_id,
+#             query=job_id,  # Basic implementation
+#             limit=limit
+#         )
+#         
+#         return await applicant_service.search_applicants(search_request)
+#     except Exception as e:
+#         logger.error(f"Error getting recommendations: {str(e)}")
+#         raise HTTPException(status_code=500, detail=f"Error getting recommendations: {str(e)}")

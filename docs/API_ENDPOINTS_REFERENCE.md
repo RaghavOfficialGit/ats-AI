@@ -48,6 +48,7 @@ This document provides a comprehensive list of all API endpoints available in th
 - **Input:** Multipart form data with file upload
 - **Processing:** AI-powered extraction using Groq
 - **Output:** Structured candidate information + vector storage
+- **Max File Size:** Configurable in settings
 
 **Request Parameters:**
 | Parameter | Type | Required | Description |
@@ -76,20 +77,40 @@ This document provides a comprehensive list of all API endpoints available in th
 
 | Method | Endpoint | Description | Parameters | Status |
 |--------|----------|-------------|------------|---------|
-| `POST` | `/api/v1/applicants` | Create new applicant | JSON body | ✅ Working |
-| `GET` | `/api/v1/applicants` | List all applicants | `tenant_id`, `limit`, `offset` | ✅ Working |
-| `GET` | `/api/v1/applicants/{id}` | Get specific applicant | `applicant_id`, `tenant_id` | ✅ Working |
-| `PUT` | `/api/v1/applicants/{id}` | Update applicant | `applicant_id`, JSON body | ✅ Working |
-| `DELETE` | `/api/v1/applicants/{id}` | Delete applicant | `applicant_id`, `tenant_id` | ✅ Working |
+| `POST` | `/api/v1/applicants` | Create new applicant | JSON body, `created_by` | ✅ Working |
+| `GET` | `/api/v1/applicants` | List applicants with filters | `tenant_id`, filters, `limit`, `offset` | ✅ Working |
+| `GET` | `/api/v1/applicants/{applicant_id}` | Get specific applicant | `applicant_id`, `tenant_id` | ✅ Working |
+| `PUT` | `/api/v1/applicants/{applicant_id}` | Update applicant | `applicant_id`, JSON body, `tenant_id`, `updated_by` | ✅ Working |
+| `DELETE` | `/api/v1/applicants/{applicant_id}` | Delete applicant | `applicant_id`, `tenant_id` | ✅ Working |
 | `POST` | `/api/v1/applicants/search` | Search applicants | JSON body | ✅ Working |
-| `POST` | `/api/v1/applicants/{id}/enhance` | AI enhance profile | `applicant_id`, `tenant_id` | ✅ Working |
+| `GET` | `/api/v1/applicants/analytics` | Get applicant analytics | `tenant_id`, filters | ✅ Working |
+| `POST` | `/api/v1/applicants/{applicant_id}/enhance` | AI enhance profile | `applicant_id`, `tenant_id` | ✅ Working |
+| `GET` | `/api/v1/applicants/filter/by-skills` | Filter by skills | `tenant_id`, `skills[]`, `limit` | ✅ Working |
+| `GET` | `/api/v1/applicants/filter/by-location` | Filter by location | `tenant_id`, `city`, `state`, `country`, `limit` | ✅ Working |
+| `GET` | `/api/v1/applicants/filter/by-experience` | Filter by experience | `tenant_id`, `min_years`, `max_years`, `limit` | ✅ Working |
+| `GET` | `/api/v1/applicants/recommendations/{job_id}` | Get recommendations for job | `job_id`, `tenant_id`, `limit` | ✅ Working |
 
 ### Applicant Search Parameters
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `tenant_id` | String | Yes | Tenant identifier |
 | `query` | String | Yes | Search query text |
+| `filters` | Object | No | Additional filters (status, source, location, etc.) |
 | `limit` | Integer | No | Number of results (default: 10) |
+
+### Applicant List/Filter Parameters
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `tenant_id` | String | Yes | Tenant identifier |
+| `limit` | Integer | No | Number of results (default: 10, max: 100) |
+| `offset` | Integer | No | Number of results to skip (default: 0) |
+| `status` | String | No | Filter by applicant status |
+| `source` | String | No | Filter by applicant source |
+| `city` | String | No | Filter by city |
+| `state` | String | No | Filter by state |
+| `min_experience` | Float | No | Minimum years of experience |
+| `max_experience` | Float | No | Maximum years of experience |
+| `is_employee` | Boolean | No | Filter by employee status |
 
 ---
 
@@ -98,14 +119,15 @@ This document provides a comprehensive list of all API endpoints available in th
 | Method | Endpoint | Description | Parameters | Status |
 |--------|----------|-------------|------------|---------|
 | `POST` | `/api/v1/jobs` | Create new job | JSON body | ✅ Working |
-| `GET` | `/api/v1/jobs` | List all jobs | `tenant_id`, `limit`, `offset` | ✅ Working |
-| `GET` | `/api/v1/jobs/{id}` | Get specific job | `job_id`, `tenant_id` | ✅ Working |
-| `PUT` | `/api/v1/jobs/{id}` | Update job | `job_id`, JSON body | ✅ Working |
-| `DELETE` | `/api/v1/jobs/{id}` | Delete job | `job_id`, `tenant_id` | ✅ Working |
+| `GET` | `/api/v1/jobs` | List/filter jobs | `tenant_id`, filters, `limit`, `offset` | ✅ Working |
+| `GET` | `/api/v1/jobs/{job_id}` | Get specific job | `job_id`, `tenant_id` | ✅ Working |
+| `PUT` | `/api/v1/jobs/{job_id}` | Update job | `job_id`, JSON body, `tenant_id` | ✅ Working |
+| `DELETE` | `/api/v1/jobs/{job_id}` | Delete job | `job_id`, `tenant_id` | ✅ Working |
 | `POST` | `/api/v1/jobs/search` | Search jobs | Query params | ✅ Working |
-| `POST` | `/api/v1/job-description/parse` | Parse job description | JSON body | ⚠️ Vector dimension issue |
-| `POST` | `/api/v1/jobs/{id}/enhance` | AI enhance job | `job_id`, `tenant_id` | ✅ Working |
-| `POST` | `/api/v1/jobs/{id}/suggestions` | Get job suggestions | `job_id`, `tenant_id` | ✅ Working |
+| `GET` | `/api/v1/jobs/analytics` | Get job analytics | `tenant_id`, `job_id` (optional) | ✅ Working |
+| `POST` | `/api/v1/job-description/parse` | Parse job description | Form data | ⚠️ Vector dimension issue |
+| `POST` | `/api/v1/jobs/{job_id}/enhance` | AI enhance job | `job_id`, `tenant_id` | ✅ Working |
+| `POST` | `/api/v1/jobs/{job_id}/suggestions` | Get job suggestions | `job_id`, `tenant_id` | ✅ Working |
 
 ### Job Creation Fields
 | Field | Type | Required | Description |
@@ -138,6 +160,22 @@ This document provides a comprehensive list of all API endpoints available in th
 | `max_experience` | Integer | No | Maximum experience filter |
 | `limit` | Integer | No | Number of results (default: 10) |
 
+### Job List/Filter Parameters
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `tenant_id` | String | Yes | Tenant identifier |
+| `job_status` | String | No | Filter by job status |
+| `customer` | String | No | Filter by customer/company |
+| `job_type` | String | No | Filter by job type |
+| `city` | String | No | Filter by city |
+| `state` | String | No | Filter by state |
+| `industry` | String | No | Filter by industry |
+| `priority` | String | No | Filter by priority |
+| `min_experience` | Integer | No | Minimum experience filter |
+| `max_experience` | Integer | No | Maximum experience filter |
+| `limit` | Integer | No | Number of results (default: 10, max: 100) |
+| `offset` | Integer | No | Number of results to skip (default: 0) |
+
 ---
 
 ## Search Endpoints
@@ -146,7 +184,25 @@ This document provides a comprehensive list of all API endpoints available in th
 |----------|--------|------|-------------|---------|
 | `/api/v1/applicants/search` | POST | Semantic | Search applicants using AI | ✅ Working |
 | `/api/v1/jobs/search` | POST | Vector | Search jobs using similarity | ✅ Working |
-| `/api/v1/resumes/search` | POST | Vector | Search resumes by content | ⚠️ Method issue |
+| `/api/v1/resumes/search` | GET | Vector | Search resumes by content | ⚠️ Legacy endpoint |
+
+### Search Request Bodies
+
+**Applicant Search (POST):**
+```json
+{
+  "tenant_id": "string",
+  "query": "search query text",
+  "filters": {},
+  "limit": 10
+}
+```
+
+**Job Search (POST via Query Params):**
+- `tenant_id` (required)
+- `query` (required)
+- Optional filters: `job_type`, `city`, `state`, `industry`, `priority`, `min_experience`, `max_experience`
+- `limit` (default: 10)
 
 ---
 
@@ -165,7 +221,20 @@ This document provides a comprehensive list of all API endpoints available in th
 | Method | Endpoint | Description | Maps To | Status |
 |--------|----------|-------------|---------|---------|
 | `GET` | `/api/v1/resumes` | List resumes | Applicants list | ✅ Working |
-| ~~`POST`~~ | ~~`/api/v1/applicants/upload-resume`~~ | ~~Upload resume~~ | **REMOVED** | ❌ Deprecated |
+| `GET` | `/api/v1/resumes/{resume_id}` | Get resume by ID | Applicant by ID | ✅ Working |
+| `POST` | `/api/v1/job/parse` | Parse job description | Job description parsing | ⚠️ Vector dimension issue |
+
+### Legacy Resume Endpoints
+These endpoints map applicant data to the legacy resume format for backward compatibility:
+- `/api/v1/resumes` → `/api/v1/applicants` 
+- `/api/v1/resumes/{id}` → `/api/v1/applicants/{id}`
+
+### Job Description Parsing
+The job description parsing endpoint is available at `/api/v1/job/parse` and accepts:
+- `job_id` (Form field)
+- `text_input` (Form field, optional)  
+- `file` (Form upload, optional)
+- `tenant_id` (Form field, default: "default")
 
 ---
 
@@ -281,6 +350,24 @@ curl -X POST "http://localhost:8000/api/v1/applicants/search" \
 curl -X POST "http://localhost:8000/api/v1/jobs/search?tenant_id=company_123&query=Python%20developer&limit=5"
 ```
 
+### 5. Parse Job Description
+```bash
+curl -X POST "http://localhost:8000/api/v1/job/parse" \
+  -F "job_id=job_123" \
+  -F "tenant_id=company_123" \
+  -F "text_input=We are looking for a Senior Python Developer..."
+```
+
+### 6. Filter Applicants by Skills
+```bash
+curl -X GET "http://localhost:8000/api/v1/applicants/filter/by-skills?tenant_id=company_123&skills=Python&skills=Django&limit=5"
+```
+
+### 7. Get Job Analytics
+```bash
+curl -X GET "http://localhost:8000/api/v1/jobs/analytics?tenant_id=company_123"
+```
+
 ---
 
 ## Testing Scripts
@@ -292,7 +379,11 @@ The following test scripts are available for endpoint validation:
 | `test_endpoints.ipynb` | Interactive endpoint testing | `/test_endpoints.ipynb` |
 | `test_resume_parsing.py` | Resume upload testing | `/test_resume_parsing.py` |
 | `test_job_parsing.py` | Job description testing | `/test_job_parsing.py` |
-| `bulk_resume_processor.py` | Bulk resume processing | `/bulk_resume_processor.py` |
+
+**Note:** Some test scripts were removed during cleanup. Main testing should be done through:
+- FastAPI interactive docs at `http://localhost:8000/api/v1/docs`
+- The `test_endpoints.ipynb` notebook
+- Manual testing with curl commands
 
 ---
 
@@ -316,8 +407,27 @@ The following test scripts are available for endpoint validation:
 
 1. **Vector Dimension Mismatch**: Job description parsing fails due to embedding dimension incompatibility (384 vs 1024)
 2. **Legacy DOC Format**: `.doc` files are not supported, only `.docx`
-3. **Vector Search Method**: `/api/v1/resumes/search` may expect different HTTP method
+3. **Vector Search Method**: Some legacy endpoints may expect different HTTP methods
 4. **Search Results**: Search endpoints return 0 results immediately after data upload (indexing delay)
+5. **File Size Limits**: Maximum file size is configurable in settings
+6. **Job Description Parsing**: The `/api/v1/job/parse` endpoint uses form data, not JSON
+
+## Recent Updates
+
+### Endpoint Changes
+- Added comprehensive filtering for applicants and jobs
+- Added analytics endpoints for both applicants and jobs  
+- Added recommendation endpoints
+- Added AI enhancement endpoints for jobs and applicants
+- Improved parameter validation and error handling
+- Added specialized filter endpoints for skills, location, and experience
+
+### New Features
+- Job enhancement with AI suggestions
+- Applicant profile enhancement
+- Advanced filtering capabilities
+- Analytics and reporting endpoints
+- Recommendation system for job-applicant matching
 
 ---
 
@@ -330,5 +440,6 @@ For technical support or API questions:
 
 ---
 
-*Last Updated: July 16, 2025*
+*Last Updated: July 17, 2025*
 *API Version: v1*
+*Documentation Status: Updated to reflect current implementation*

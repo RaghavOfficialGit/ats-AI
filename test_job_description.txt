@@ -1,0 +1,50 @@
+Job Title: Senior Software Engineer
+
+Company: TechCorp Solutions
+
+Location: San Francisco, CA
+
+Job Type: Full-time
+
+Experience Required: 3-5 years
+
+Required Skills:
+- Python programming
+- React and JavaScript
+- REST API development
+- Database design (PostgreSQL, MongoDB)
+- Git version control
+- Docker and containerization
+- AWS cloud services
+
+Nice to Have Skills:
+- Machine Learning experience
+- Kubernetes
+- GraphQL
+- TypeScript
+
+Job Description:
+We are seeking a Senior Software Engineer to join our dynamic development team. The ideal candidate will have 3-5 years of experience in full-stack development with a strong background in Python and React. You will be responsible for designing and implementing scalable web applications, working with cross-functional teams, and mentoring junior developers.
+
+Responsibilities:
+- Develop and maintain web applications using Python and React
+- Design and implement RESTful APIs
+- Collaborate with product managers and designers
+- Write clean, maintainable, and well-tested code
+- Participate in code reviews and technical discussions
+- Mentor junior team members
+
+Requirements:
+- Bachelor's degree in Computer Science or related field
+- 3-5 years of professional software development experience
+- Strong proficiency in Python and React
+- Experience with relational and NoSQL databases
+- Knowledge of cloud platforms, preferably AWS
+- Excellent problem-solving and communication skills
+
+Benefits:
+- Competitive salary
+- Health insurance
+- 401(k) retirement plan
+- Flexible work arrangements
+- Professional development opportunities

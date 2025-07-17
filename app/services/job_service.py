@@ -220,9 +220,9 @@ class JobService:
             # Generate embeddings
             embedding = await self.groq_service.generate_embedding(text_content)
             
-            # Store in vector database
+            # Store in vector database with parsed metadata
             embedding_id = await self.vector_service.store_job_embedding(
-                job_id, embedding, request.tenant_id
+                job_id, embedding, request.tenant_id, metadata=parsed_data
             )
             parsed_data['embedding_id'] = embedding_id
             

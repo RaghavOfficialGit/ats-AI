@@ -21,7 +21,7 @@ class ApplicantService:
     def __init__(self, vector_service: VectorService, groq_service: GroqService):
         self.vector_service = vector_service
         self.groq_service = groq_service
-        self.collection_name = "applicants"
+        self.collection_name = "resume_embeddings_mistral"  # Use existing resume collection
         
     async def initialize(self):
         """Initialize the applicant collection in Milvus"""
@@ -83,7 +83,7 @@ class ApplicantService:
             searchable_content = self._generate_searchable_content(applicant_data)
             
             # Generate embedding
-            embedding = self.vector_service.generate_embedding(searchable_content)
+            embedding = await self.groq_service.generate_embedding(searchable_content)
             
             # Prepare metadata for Milvus
             now = int(datetime.now().timestamp())
@@ -604,7 +604,7 @@ class ApplicantService:
                                           applicant_id: str, guid: str, created_by: str) -> Dict[str, Any]:
         """Create metadata dictionary from applicant request"""
         searchable_content = self._generate_searchable_content(applicant_data)
-        embedding = self.vector_service.generate_embedding(searchable_content)
+        embedding = await self.groq_service.generate_embedding(searchable_content)
         
         now = int(datetime.now().timestamp())
         return {

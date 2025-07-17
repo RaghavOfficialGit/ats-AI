@@ -46,6 +46,21 @@ app.add_middleware(
 # Include API router
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    try:
+        # Test Milvus connection
+        from app.services.vector_service import VectorService
+        from app.services.groq_service import GroqService
+        
+        groq_service = GroqService()
+        vector_service = VectorService.create_with_groq(groq_service)
+        await vector_service.connect()
+        logger.info("✅ Vector service connected successfully on startup")
+    except Exception as e:
+        logger.error(f"❌ Failed to connect vector service on startup: {e}")
+
 @app.get("/")
 async def root():
     return {"message": "AI Recruitment Platform API", "version": "1.0.0"}
