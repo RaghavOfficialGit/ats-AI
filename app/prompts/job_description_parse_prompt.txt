@@ -1,0 +1,22 @@
+Extract the following information from this job description text and return it as a JSON object:
+
+{
+    "job_title": "Job title/position",
+    "required_skills": ["List of required skills"],
+    "nice_to_have_skills": ["List of preferred/nice-to-have skills"],
+    "experience_range": {
+        "min": "minimum years of experience",
+        "max": "maximum years of experience"
+    },
+    "location": "Job location",
+    "client_project": "Client or project context",
+    "employment_type": "Full-time/Part-Time/Contract/etc",
+    "required_certifications": ["List of required certifications"],
+    "summary": "200-word job description summary",
+    "seo_description": "SEO-optimized job description for search engines"
+}
+
+Job description text:
+{job_text}
+
+Return only the JSON object, no other text.

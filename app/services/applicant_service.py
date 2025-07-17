@@ -13,6 +13,7 @@ from app.models.applicant import (
 )
 from app.services.vector_service import VectorService
 from app.services.groq_service import GroqService
+from app.core.prompt_loader import prompt_loader
 import logging
 
 logger = logging.getLogger(__name__)
@@ -503,20 +504,7 @@ class ApplicantService:
             # Generate enhancement suggestions using Groq
             profile_text = self._generate_searchable_content_from_response(applicant)
             
-            enhancement_prompt = f"""
-            Analyze this applicant profile and provide enhancement suggestions:
-            
-            {profile_text}
-            
-            Provide suggestions for:
-            1. Missing skills that should be highlighted
-            2. Career progression recommendations
-            3. Interview preparation tips
-            4. Profile optimization suggestions
-            5. Potential job matches based on experience
-            
-            Return as JSON with these sections.
-            """
+            enhancement_prompt = prompt_loader.format_prompt('applicant_enhancement_prompt.txt', profile_text=profile_text)
             
             suggestions = await self.groq_service.get_completion(enhancement_prompt)
             

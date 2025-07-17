@@ -1,0 +1,19 @@
+Analyze this applicant profile and provide enhancement suggestions:
+
+{profile_text}
+
+Provide suggestions for:
+1. Missing skills that should be highlighted
+2. Career progression recommendations
+3. Interview preparation tips
+4. Profile optimization suggestions
+5. Potential job matches based on experience
+
+Return as JSON with these sections:
+{
+    "missing_skills": ["skill1", "skill2"],
+    "career_progression": ["suggestion1", "suggestion2"],
+    "interview_tips": ["tip1", "tip2"],
+    "profile_optimization": ["optimization1", "optimization2"],
+    "potential_matches": ["match1", "match2"]
+}

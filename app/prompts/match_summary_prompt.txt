@@ -1,0 +1,18 @@
+Generate a human-readable match summary based on this job and candidate data:
+
+Job: {job_title}
+Required Skills: {required_skills}
+Experience Range: {experience_range}
+
+Candidate: {candidate_name}
+Current Role: {current_role}
+Skills: {candidate_skills}
+
+Scores:
+- Overall: {overall_score}%
+- Skills Match: {skills_match_score}%
+- Experience Match: {experience_match_score}%
+- Location Match: {location_match_score}%
+
+Write a 2-3 sentence summary explaining why this candidate is a good or poor match for this job.
+Focus on the key strengths and any potential concerns.

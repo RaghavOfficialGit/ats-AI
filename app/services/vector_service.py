@@ -76,17 +76,22 @@ class VectorService:
             logger.info(f"Resume collection '{collection_name}' already exists")
             return
         
-        # Define collection schema
+        # Define collection schema for all 11 required fields
         fields = [
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
             FieldSchema(name="vector_id", dtype=DataType.VARCHAR, max_length=100),
-            FieldSchema(name="candidate_id", dtype=DataType.VARCHAR, max_length=100),
+            FieldSchema(name="candidate_id", dtype=DataType.VARCHAR, max_length=100),  # 11. Candidate ID from input
             FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1024),  # Mistral model dimension
-            FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=200),
-            FieldSchema(name="skills", dtype=DataType.VARCHAR, max_length=2000),
-            FieldSchema(name="location", dtype=DataType.VARCHAR, max_length=200),
-            FieldSchema(name="current_employer", dtype=DataType.VARCHAR, max_length=200),
-            FieldSchema(name="current_job_title", dtype=DataType.VARCHAR, max_length=200),
+            FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=200),  # 1. Name
+            FieldSchema(name="email", dtype=DataType.VARCHAR, max_length=200),  # 2. Email
+            FieldSchema(name="telephone", dtype=DataType.VARCHAR, max_length=50),  # 3. Telephone number
+            FieldSchema(name="current_employer", dtype=DataType.VARCHAR, max_length=200),  # 4. Current employer
+            FieldSchema(name="current_job_title", dtype=DataType.VARCHAR, max_length=200),  # 5. Current job title
+            FieldSchema(name="location", dtype=DataType.VARCHAR, max_length=200),  # 6. Location
+            FieldSchema(name="educational_qualifications", dtype=DataType.VARCHAR, max_length=3000),  # 7. Educational qualifications (1:n)
+            FieldSchema(name="skills", dtype=DataType.VARCHAR, max_length=2000),  # 8. Skills (1:n)
+            FieldSchema(name="experience_summary", dtype=DataType.VARCHAR, max_length=5000),  # 9. Experience summary by employer (1:n)
+            FieldSchema(name="applicant_summary", dtype=DataType.VARCHAR, max_length=1000),  # 10. Summary of applicant
         ]
         
         schema = CollectionSchema(fields, "Resume embeddings for semantic search")
@@ -183,16 +188,21 @@ class VectorService:
             else:
                 raise Exception("GroqService not available for embedding generation")
             
-            # Prepare data for insertion
+            # Prepare data for insertion - ensure no None values, store all 11 fields
             data = [
                 [vector_id],
-                [candidate_id],
+                [candidate_id],  # 11. Candidate ID from input
                 [embedding],
-                [metadata.get('name', '')],
-                [', '.join(metadata.get('skills', []))],
-                [metadata.get('location', '')],
-                [metadata.get('current_employer', '')],
-                [metadata.get('current_job_title', '')]
+                [metadata.get('name') or ''],  # 1. Name
+                [metadata.get('email') or ''],  # 2. Email
+                [metadata.get('telephone') or ''],  # 3. Telephone number
+                [metadata.get('current_employer') or ''],  # 4. Current employer
+                [metadata.get('current_job_title') or ''],  # 5. Current job title
+                [metadata.get('location') or ''],  # 6. Location
+                [self._serialize_array_field(metadata.get('educational_qualifications', []))],  # 7. Educational qualifications
+                [self._serialize_array_field(metadata.get('skills', []))],  # 8. Skills
+                [self._serialize_array_field(metadata.get('experience_summary', []))],  # 9. Experience summary
+                [metadata.get('applicant_summary') or '']  # 10. Summary of applicant
             ]
             
             # Insert data
@@ -822,4 +832,17 @@ class VectorService:
                 else:
                     flattened[key] = value
         
-        return flattened
+            return flattened
+    
+    def _serialize_array_field(self, field_data):
+        """Serialize array fields to JSON string for Milvus storage"""
+        if not field_data:
+            return ""
+        
+        try:
+            if isinstance(field_data, list):
+                return json.dumps(field_data)
+            else:
+                return str(field_data)
+        except (TypeError, ValueError):
+            return str(field_data) if field_data else ""

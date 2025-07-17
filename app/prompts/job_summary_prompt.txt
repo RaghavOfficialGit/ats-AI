@@ -1,0 +1,12 @@
+Analyze this job information and generate:
+1. A comprehensive summary (2-3 sentences)
+2. An SEO-friendly description (1-2 sentences)
+
+Job Information:
+{job_content}
+
+Return as JSON:
+{
+    "summary": "comprehensive summary here",
+    "seo_description": "SEO description here"
+}

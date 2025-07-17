@@ -1,0 +1,13 @@
+Extract skills from this job information and categorize them:
+
+Job Information:
+{job_content}
+
+Return as JSON:
+{
+    "primary_skills": ["skill1", "skill2"],
+    "secondary_skills": ["skill1", "skill2"]
+}
+
+Primary skills are must-have, core requirements.
+Secondary skills are nice-to-have or preferred skills.

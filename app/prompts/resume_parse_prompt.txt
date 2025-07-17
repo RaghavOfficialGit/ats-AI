@@ -1,0 +1,26 @@
+Extract the following information from this resume text and return it as a JSON object:
+
+{
+    "name": "Full name of the person",
+    "email": "Email address",
+    "phone": "Phone number",
+    "current_employer": "Current company/employer",
+    "current_job_title": "Current job title/position",
+    "location": "Current location/city",
+    "education": ["List of education entries"],
+    "skills": ["List of skills and technologies"],
+    "experience_summary": [
+        {
+            "company": "Company name",
+            "role": "Job title/role",
+            "duration": "Time period worked",
+            "location": "Job location"
+        }
+    ],
+    "summary": "Brief 200-word professional summary"
+}
+
+Resume text:
+{resume_text}
+
+Return only the JSON object, no other text.

@@ -1,0 +1,22 @@
+Parse this job description and extract information in JSON format:
+
+{job_text}
+
+Return only valid JSON with these exact fields:
+{
+    "job_title": "Job title/position name",
+    "required_skills": ["skill1", "skill2", "skill3"],
+    "nice_to_have_skills": ["skill1", "skill2"],
+    "experience_range": {
+        "min": 0,
+        "max": 10
+    },
+    "location": "Job location/city",
+    "client_project": "Client or project name",
+    "employment_type": "Full-time",
+    "required_certifications": ["cert1", "cert2"],
+    "summary": "Brief job description summary",
+    "seo_description": "SEO-friendly description"
+}
+
+Extract all required skills, experience range, and other details. Use null for missing information.

@@ -78,102 +78,26 @@ async def parse_resume(
                 detail="Could not extract sufficient text from the file. Please ensure the file contains readable text."
             )
         
-        # Prepare prompt for Groq AI
-        resume_parsing_prompt = f"""
-        Read the attached resume and return the following information in a JSON format.
-        Extract ALL available information accurately.
-        
-        Resume Text:
-        {extracted_text}
-        
-        Return ONLY a valid JSON object with this exact structure:
-        {{
-            "name": "Full name of the candidate",
-            "email": "Email address",
-            "telephone": "Phone number",
-            "current_employer": "Current company name",
-            "current_job_title": "Current position/title",
-            "location": "Current location/city",
-            "educational_qualifications": [
-                {{
-                    "degree": "Degree name",
-                    "institution": "University/School name", 
-                    "year": "Graduation year",
-                    "field": "Field of study"
-                }}
-            ],
-            "skills": ["skill1", "skill2", "skill3"],
-            "experience_summary": [
-                {{
-                    "employer": "Company name",
-                    "job_title": "Position title",
-                    "start_date": "Start date",
-                    "end_date": "End date or 'Present'",
-                    "location": "Work location",
-                    "description": "Brief description of role and achievements"
-                }}
-            ],
-            "candidate_summary": "Professional summary in less than 200 words highlighting key strengths, experience, and qualifications"
-        }}
-        
-        Instructions:
-        - If information is not available, use null for strings and empty arrays for lists
-        - Ensure all dates are in a consistent format
-        - Extract ALL skills mentioned (technical, soft skills, tools, technologies)
-        - Make the candidate summary compelling and professional
-        - Return ONLY the JSON object, no additional text
-        """
-        
-        # Get AI response
+        # Parse resume using the comprehensive parsing method
         try:
-            logger.info("Sending prompt to Groq AI...")
-            logger.debug(f"Prompt length: {len(resume_parsing_prompt)} characters")
-            ai_response = await groq_service.generate_completion(resume_parsing_prompt)
-            logger.info(f"Groq AI response received. Response length: {len(ai_response)} characters")
-            logger.debug(f"AI Response preview: {ai_response[:300]}...")
-        except Exception as groq_error:
-            logger.error(f"Groq AI service failed: {str(groq_error)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"AI service error: {str(groq_error)}"
-            )
-        
-        # Parse AI response to JSON
-        try:
-            logger.info("Parsing AI response as JSON...")
-            parsed_data = json.loads(ai_response)
-            logger.info("JSON parsing successful")
+            logger.info("Parsing resume using comprehensive method...")
+            parsed_data = await groq_service.parse_resume_comprehensive(extracted_text)
+            logger.info("Resume parsing completed successfully")
             logger.debug(f"Parsed data keys: {list(parsed_data.keys())}")
             
             # Validate required fields
             required_fields = ['name', 'email', 'telephone', 'current_employer', 'current_job_title', 
-                             'location', 'educational_qualifications', 'skills', 'experience_summary', 'candidate_summary']
+                             'location', 'educational_qualifications', 'skills', 'experience_summary', 'applicant_summary']
             missing_fields = [field for field in required_fields if field not in parsed_data]
             if missing_fields:
                 logger.warning(f"Missing fields in parsed data: {missing_fields}")
             
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse AI response as JSON: {e}")
-            logger.error(f"AI Response (first 1000 chars): {ai_response[:1000]}")
-            logger.error(f"AI Response (last 500 chars): {ai_response[-500:]}")
-            
-            # Try to extract JSON from response if it's wrapped in other text
-            try:
-                logger.info("Attempting to extract JSON from response...")
-                import re
-                json_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group()
-                    parsed_data = json.loads(json_str)
-                    logger.info("Successfully extracted and parsed JSON from response")
-                else:
-                    raise ValueError("No JSON found in response")
-            except Exception as extract_error:
-                logger.error(f"Failed to extract JSON: {extract_error}")
-                raise HTTPException(
-                    status_code=500,
-                    detail="AI service returned invalid JSON. Please try again."
-                )
+        except Exception as parsing_error:
+            logger.error(f"Resume parsing failed: {str(parsing_error)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Resume parsing error: {str(parsing_error)}"
+            )
         
         # Generate vector embedding for semantic search
         try:
@@ -181,8 +105,8 @@ async def parse_resume(
             text_for_embedding = f"""
             Name: {parsed_data.get('name', '')}
             Skills: {', '.join(parsed_data.get('skills', []))}
-            Experience: {' '.join([exp.get('description', '') for exp in parsed_data.get('experience_summary', [])])}
-            Summary: {parsed_data.get('candidate_summary', '')}
+            Experience: {' '.join([exp.get('summary', '') for exp in parsed_data.get('experience_summary', [])])}
+            Summary: {parsed_data.get('applicant_summary', '')}
             Location: {parsed_data.get('location', '')}
             """
             logger.debug(f"Text for embedding length: {len(text_for_embedding)} characters")
@@ -197,10 +121,15 @@ async def parse_resume(
                 text=text_for_embedding,
                 metadata={
                     "name": parsed_data.get('name'),
-                    "skills": parsed_data.get('skills', []),
-                    "location": parsed_data.get('location'),
+                    "email": parsed_data.get('email'),
+                    "telephone": parsed_data.get('telephone'),
                     "current_employer": parsed_data.get('current_employer'),
-                    "current_job_title": parsed_data.get('current_job_title')
+                    "current_job_title": parsed_data.get('current_job_title'),
+                    "location": parsed_data.get('location'),
+                    "educational_qualifications": parsed_data.get('educational_qualifications', []),
+                    "skills": parsed_data.get('skills', []),
+                    "experience_summary": parsed_data.get('experience_summary', []),
+                    "applicant_summary": parsed_data.get('applicant_summary')
                 }
             )
             
@@ -215,7 +144,7 @@ async def parse_resume(
             vector_id = str(uuid.uuid4())  # Generate ID anyway for response consistency
             embedding_success = False
         
-        # Prepare final response with all required fields
+        # Prepare final response with the 11 essential fields
         try:
             logger.info("Preparing final response...")
             response = {
@@ -229,11 +158,11 @@ async def parse_resume(
                 "educational_qualifications": parsed_data.get('educational_qualifications', []),  # Array (1:n)
                 "skills": parsed_data.get('skills', []),         # Array (1:n)
                 "experience_summary": parsed_data.get('experience_summary', []),  # Array (1:n)
-                "candidate_summary": parsed_data.get('candidate_summary'),        # AI summary <200 words (1:1)
+                "applicant_summary": parsed_data.get('applicant_summary'),        # AI summary <200 words (1:1)
                 "milvus_vector_id": vector_id,                   # Generated UUID (1:1)
                 "processing_status": "success",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
-                "embedding_stored": embedding_success  # Add this for debugging
+                "embedding_stored": embedding_success
             }
             
             logger.info(f"Successfully processed resume for candidate_id: {candidate_id}")

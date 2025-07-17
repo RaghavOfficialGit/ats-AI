@@ -1,0 +1,18 @@
+Based on this basic job information, create enhanced descriptions:
+
+Basic Info:
+{basic_job_info}
+
+Generate:
+1. Internal job description (detailed, for recruiters)
+2. External job description (polished, for candidates)
+3. Required documents list
+4. Key responsibilities
+
+Return as JSON:
+{
+    "internal_description": "detailed internal description",
+    "external_description": "polished external description", 
+    "required_documents": "list of required documents",
+    "key_responsibilities": "key responsibilities"
+}

@@ -1,0 +1,48 @@
+You are an expert resume parser. Analyze the following resume text and extract ONLY the essential information into a structured JSON format.
+
+Resume Text:
+{resume_text}
+
+Extract the following information and return it as a valid JSON object with this EXACT structure:
+
+{{
+    "name": "Full name of the candidate",
+    "email": "Email address",
+    "telephone": "Phone number",
+    "current_employer": "Current company name",
+    "current_job_title": "Current position title",
+    "location": "Current location (city, state/country)",
+    "educational_qualifications": [
+        {{
+            "degree": "Degree name",
+            "institution": "University/school name",
+            "graduation_year": "Year graduated",
+            "field_of_study": "Major/field of study"
+        }}
+    ],
+    "skills": [
+        "Skill 1",
+        "Skill 2",
+        "Skill 3"
+    ],
+    "experience_summary": [
+        {{
+            "employer": "Company name",
+            "job_title": "Position held",
+            "start_date": "Start date",
+            "end_date": "End date or Present",
+            "location": "Work location",
+            "summary": "Brief description of role and achievements"
+        }}
+    ],
+    "applicant_summary": "Professional summary of the candidate in less than 200 words highlighting key strengths, experience, and qualifications"
+}}
+
+IMPORTANT INSTRUCTIONS:
+1. If information is not available, use null for strings and empty arrays for lists
+2. Extract ALL skills mentioned (technical, programming languages, frameworks, tools, soft skills)
+3. For experience_summary, include all previous positions with dates and locations
+4. Keep the applicant_summary under 200 words
+5. Return ONLY the JSON object, no additional text or formatting
+6. Ensure all dates are in a consistent format (YYYY-MM-DD or YYYY-MM or YYYY)
+7. Extract the full name in the "name" field (combine first and last name)

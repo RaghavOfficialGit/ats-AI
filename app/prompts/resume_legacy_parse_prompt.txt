@@ -1,0 +1,5 @@
+Parse this resume and extract information in JSON format:
+
+{resume_text}
+
+Return only valid JSON with fields: name, email, phone, skills, experience, education, summary.
