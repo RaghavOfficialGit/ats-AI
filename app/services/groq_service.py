@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 from groq import Groq
 import asyncio
 import httpx
+import re
 
 from app.core.config import settings
 
@@ -23,7 +24,7 @@ class GroqService:
         self.mistral_base_url = "https://api.mistral.ai/v1"
         
     async def generate_completion(self, prompt: str) -> str:
-        """Generate completion using Groq LLM"""
+        """Generate completion using Groq LLM with enhanced JSON extraction"""
         try:
             # Check if API key is available
             if not self.groq_api_key or not self.client:
@@ -52,67 +53,240 @@ class GroqService:
             logger.info(f"Groq API response received successfully. Response length: {len(response_content)} characters")
             logger.debug(f"Response preview: {response_content[:200]}...")
             
-            return response_content
+            # FIXED: Clean the response to extract JSON
+            cleaned_response = self._extract_and_clean_json(response_content)
+            
+            return cleaned_response
             
         except Exception as e:
             logger.error(f"Error calling Groq API: {str(e)}")
             logger.error(f"Model: {self.model}, Prompt length: {len(prompt)}")
             raise Exception(f"Failed to generate completion: {str(e)}")
     
-    async def parse_resume(self, text_content: str) -> Dict:
-        """Parse resume text using Groq LLM - Legacy method for compatibility"""
-        prompt = f"""
-        Parse this resume and extract information in JSON format:
+    def _extract_and_clean_json(self, response_text: str) -> str:
+        """Extract and clean JSON from AI response"""
+        try:
+            # Remove markdown code blocks
+            response_text = response_text.strip()
+            
+            # Remove ```json or ``` markers
+            if response_text.startswith('```'):
+                # Find the start and end of the JSON block
+                lines = response_text.split('\n')
+                json_lines = []
+                in_json_block = False
+                
+                for line in lines:
+                    if line.strip().startswith('```'):
+                        if not in_json_block:
+                            in_json_block = True
+                            continue
+                        else:
+                            break
+                    
+                    if in_json_block:
+                        json_lines.append(line)
+                
+                response_text = '\n'.join(json_lines)
+            
+            # Try to find JSON object boundaries
+            json_pattern = r'\{.*\}'
+            match = re.search(json_pattern, response_text, re.DOTALL)
+            
+            if match:
+                json_text = match.group(0)
+            else:
+                # If no pattern found, assume the whole response is JSON
+                json_text = response_text.strip()
+            
+            # Clean common JSON issues
+            json_text = self._fix_json_issues(json_text)
+            
+            # Validate JSON by parsing it
+            json.loads(json_text)  # This will raise an exception if invalid
+            
+            logger.info("Successfully extracted and validated JSON from response")
+            return json_text
+            
+        except Exception as e:
+            logger.warning(f"JSON extraction/cleaning failed: {str(e)}")
+            # Return original response if cleaning fails
+            return response_text
+
+    def _fix_json_issues(self, json_text: str) -> str:
+        """Fix common JSON formatting issues"""
+        # Fix trailing commas before closing brackets/braces
+        json_text = re.sub(r',(\s*[}\]])', r'\1', json_text)
         
+        # Fix null values that should be quoted
+        json_text = re.sub(r':\s*null(?=\s*[,}])', r': null', json_text)
+        
+        # Fix unquoted null values in strings
+        json_text = re.sub(r':\s*"null"', r': null', json_text)
+        
+        # Fix missing quotes around field names (but avoid double-quoting)
+        json_text = re.sub(r'(?<!")(\w+)(?=\s*:)', r'"\1"', json_text)
+        
+        # Fix already quoted field names (avoid double quotes)
+        json_text = re.sub(r'""(\w+)":', r'"\1":', json_text)
+        
+        return json_text
+    
+    async def parse_resume(self, text_content: str) -> Dict:
+        """Parse resume text using Groq LLM - Enhanced with better error handling"""
+        prompt = f"""
+        Read the attached resume and return the following information in a JSON format.
+        Extract ALL available information accurately.
+        
+        Resume Text:
         {text_content}
         
-        Return only valid JSON with fields: name, email, phone, skills, experience, education, summary.
+        Return ONLY a valid JSON object with this exact structure:
+        {{
+            "name": "Full name of the candidate",
+            "email": "Email address",
+            "telephone": "Phone number",
+            "current_employer": "Current company name",
+            "current_job_title": "Current position/title",
+            "location": "Current location/city",
+            "educational_qualifications": [
+                {{
+                    "degree": "Degree name",
+                    "institution": "University/School name", 
+                    "year": "Graduation year",
+                    "field": "Field of study"
+                }}
+            ],
+            "skills": ["skill1", "skill2", "skill3"],
+            "experience_summary": [
+                {{
+                    "employer": "Company name",
+                    "job_title": "Position title",
+                    "start_date": "Start date",
+                    "end_date": "End date or Present",
+                    "location": "Work location",
+                    "description": "Brief description of role and achievements"
+                }}
+            ],
+            "candidate_summary": "Professional summary in less than 200 words highlighting key strengths, experience, and qualifications"
+        }}
+        
+        IMPORTANT RULES:
+        - Return ONLY the JSON object, no other text or markdown
+        - If information is not available, use null for strings and empty arrays for lists
+        - Ensure all dates are in a consistent format
+        - Extract ALL skills mentioned (technical, soft skills, tools, technologies)
+        - Make the candidate summary compelling and professional
+        - DO NOT include markdown code blocks or formatting
+        - Ensure valid JSON syntax with proper commas and quotes
         """
         
-        response = await self.generate_completion(prompt)
-        
         try:
-            return json.loads(response)
-        except json.JSONDecodeError:
-            logger.error(f"Failed to parse JSON from Groq response: {response}")
-            return {}
+            response = await self.generate_completion(prompt)
+            
+            # Parse the JSON response
+            parsed_data = json.loads(response)
+            
+            # Validate that we have the required structure
+            required_fields = ['name', 'email', 'telephone', 'current_employer', 'current_job_title', 
+                              'location', 'educational_qualifications', 'skills', 'experience_summary', 'candidate_summary']
+            
+            for field in required_fields:
+                if field not in parsed_data:
+                    parsed_data[field] = None if field not in ['educational_qualifications', 'skills', 'experience_summary'] else []
+            
+            logger.info("Successfully parsed resume data")
+            return parsed_data
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {str(e)}")
+            logger.error(f"Response that failed to parse: {response[:500]}...")
+            
+            # Return a basic structure if parsing fails
+            return {
+                "name": None,
+                "email": None,
+                "telephone": None,
+                "current_employer": None,
+                "current_job_title": None,
+                "location": None,
+                "educational_qualifications": [],
+                "skills": [],
+                "experience_summary": [],
+                "candidate_summary": "Resume parsing encountered an error. Please try again."
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in parse_resume: {str(e)}")
+            raise
     
     async def parse_job_description(self, text_content: str) -> Dict:
-        """Parse job description text using Groq LLM - Legacy method for compatibility"""
+        """Parse job description text using Groq LLM - Enhanced with better error handling"""
         prompt = f"""
         Parse this job description and extract information in JSON format:
         
         {text_content}
         
-        Return only valid JSON with these exact fields:
+        Return ONLY a valid JSON object with these exact fields:
         {{
             "job_title": "Job title/position name",
             "required_skills": ["skill1", "skill2", "skill3"],
             "nice_to_have_skills": ["skill1", "skill2"],
             "experience_range": {{
-                "min": 0,
-                "max": 10
+                "min_years": 0,
+                "max_years": 10
             }},
             "location": "Job location/city",
             "client_project": "Client or project name",
             "employment_type": "Full-time",
             "required_certifications": ["cert1", "cert2"],
-            "summary": "Brief job description summary",
-            "seo_description": "SEO-friendly description"
+            "job_description_summary": "Brief job description summary",
+            "seo_job_description": "SEO-friendly description"
         }}
         
-        Extract all required skills, experience range, and other details. Use null for missing information.
+        IMPORTANT RULES:
+        - Return ONLY the JSON object, no markdown or extra text
+        - Extract all required skills, experience range, and other details
+        - Use null for missing information
+        - Ensure valid JSON syntax
         """
         
-        response = await self.generate_completion(prompt)
-        
         try:
-            return json.loads(response)
-        except json.JSONDecodeError:
-            logger.error(f"Failed to parse JSON from Groq response: {response}")
-            return {}
+            response = await self.generate_completion(prompt)
+            parsed_data = json.loads(response)
+            
+            # Validate and set defaults
+            if 'experience_range' not in parsed_data:
+                parsed_data['experience_range'] = {"min_years": 0, "max_years": 0}
+            
+            required_arrays = ['required_skills', 'nice_to_have_skills', 'required_certifications']
+            for field in required_arrays:
+                if field not in parsed_data:
+                    parsed_data[field] = []
+            
+            logger.info("Successfully parsed job description data")
+            return parsed_data
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error in job parsing: {str(e)}")
+            logger.error(f"Response that failed to parse: {response[:500]}...")
+            
+            # Return basic structure if parsing fails
+            return {
+                "job_title": None,
+                "required_skills": [],
+                "nice_to_have_skills": [],
+                "experience_range": {"min_years": 0, "max_years": 0},
+                "location": None,
+                "client_project": None,
+                "employment_type": None,
+                "required_certifications": [],
+                "job_description_summary": "Job description parsing encountered an error. Please try again.",
+                "seo_job_description": "Job description"
+            }
+            
         except Exception as e:
-            logger.error(f"Error parsing job description with Groq: {str(e)}")
+            logger.error(f"Error in parse_job_description: {str(e)}")
             raise
     
     async def generate_embedding(self, text: str) -> List[float]:
@@ -160,9 +334,7 @@ class GroqService:
         """Generate human-readable match summary"""
         try:
             prompt = self._create_match_summary_prompt(job_data, resume_data, scores)
-            
             completion = await self._make_groq_call(prompt)
-            
             return completion.strip()
             
         except Exception as e:
@@ -188,64 +360,6 @@ class GroqService:
             logger.error(f"Groq API call failed: {str(e)}")
             raise
     
-    def _create_resume_parse_prompt(self, text: str) -> str:
-        """Create prompt for resume parsing"""
-        return f"""
-        Extract the following information from this resume text and return it as a JSON object:
-        
-        {{
-            "name": "Full name of the person",
-            "email": "Email address",
-            "phone": "Phone number",
-            "current_employer": "Current company/employer",
-            "current_job_title": "Current job title/position",
-            "location": "Current location/city",
-            "education": ["List of education entries"],
-            "skills": ["List of skills and technologies"],
-            "experience_summary": [
-                {{
-                    "company": "Company name",
-                    "role": "Job title/role",
-                    "duration": "Time period worked",
-                    "location": "Job location"
-                }}
-            ],
-            "summary": "Brief 200-word professional summary"
-        }}
-        
-        Resume text:
-        {text}
-        
-        Return only the JSON object, no other text.
-        """
-    
-    def _create_job_description_parse_prompt(self, text: str) -> str:
-        """Create prompt for job description parsing"""
-        return f"""
-        Extract the following information from this job description text and return it as a JSON object:
-        
-        {{
-            "job_title": "Job title/position",
-            "required_skills": ["List of required skills"],
-            "nice_to_have_skills": ["List of preferred/nice-to-have skills"],
-            "experience_range": {{
-                "min": "minimum years of experience",
-                "max": "maximum years of experience"
-            }},
-            "location": "Job location",
-            "client_project": "Client or project context",
-            "employment_type": "Full-time/Part-Time/Contract/etc",
-            "required_certifications": ["List of required certifications"],
-            "summary": "200-word job description summary",
-            "seo_description": "SEO-optimized job description for search engines"
-        }}
-        
-        Job description text:
-        {text}
-        
-        Return only the JSON object, no other text.
-        """
-    
     def _create_match_summary_prompt(self, job_data: Dict, resume_data: Dict, scores: Dict) -> str:
         """Create prompt for match summary generation"""
         return f"""
@@ -269,40 +383,6 @@ class GroqService:
         Focus on the key strengths and any potential concerns.
         """
     
-    def _validate_resume_data(self, data: Dict) -> Dict:
-        """Validate and clean resume data"""
-        # Ensure required fields exist
-        required_fields = ['name', 'email', 'phone', 'skills', 'experience_summary', 'summary']
-        
-        for field in required_fields:
-            if field not in data:
-                if field in ['skills', 'experience_summary']:
-                    data[field] = []
-                else:
-                    data[field] = None
-        
-        # Clean email
-        if data.get('email') and '@' not in str(data['email']):
-            data['email'] = None
-        
-        return data
-    
-    def _validate_job_description_data(self, data: Dict) -> Dict:
-        """Validate and clean job description data"""
-        # Ensure required fields exist
-        required_fields = ['job_title', 'required_skills', 'nice_to_have_skills', 'experience_range']
-        
-        for field in required_fields:
-            if field not in data:
-                if field in ['required_skills', 'nice_to_have_skills']:
-                    data[field] = []
-                elif field == 'experience_range':
-                    data[field] = {"min": 0, "max": 0}
-                else:
-                    data[field] = None
-        
-        return data
-    
     async def generate_job_summary(self, job_content: str) -> Dict[str, str]:
         """Generate AI summary and SEO description for job"""
         prompt = f"""
@@ -318,6 +398,8 @@ class GroqService:
             "summary": "comprehensive summary here",
             "seo_description": "SEO description here"
         }}
+        
+        Return ONLY the JSON object, no markdown or extra text.
         """
         
         try:
@@ -346,6 +428,7 @@ class GroqService:
         
         Primary skills are must-have, core requirements.
         Secondary skills are nice-to-have or preferred skills.
+        Return ONLY the JSON object, no markdown or extra text.
         """
         
         try:
@@ -379,6 +462,8 @@ class GroqService:
             "required_documents": "list of required documents",
             "key_responsibilities": "key responsibilities"
         }}
+        
+        Return ONLY the JSON object, no markdown or extra text.
         """
         
         try:
@@ -416,6 +501,8 @@ class GroqService:
             "market_competitiveness": ["suggestion1", "suggestion2"], 
             "compliance": ["suggestion1", "suggestion2"]
         }}
+        
+        Return ONLY the JSON object, no markdown or extra text.
         """
         
         try:
@@ -430,219 +517,22 @@ class GroqService:
                 "compliance": []
             }
     
-    async def parse_resume_comprehensive(self, resume_text: str) -> Dict:
-        """
-        Parse resume text and extract comprehensive structured information
-        
-        Args:
-            resume_text: The extracted text from the resume
-            
-        Returns:
-            Dict: Comprehensive structured resume data
-        """
+    async def generate_embedding_safe(self, text: str) -> Optional[List[float]]:
+        """Generate embedding with better error handling"""
         try:
-            logger.info(f"Starting comprehensive resume parsing. Text length: {len(resume_text)} characters")
+            if not text or len(text.strip()) < 10:
+                logger.warning("Text too short for embedding generation")
+                return None
+                
+            embedding = await self.generate_embedding(text)
             
-            prompt = f"""
-You are an expert resume parser. Analyze the following resume text and extract ALL available information into a structured JSON format.
-
-Resume Text:
-{resume_text}
-
-Extract the following information and return it as a valid JSON object with this EXACT structure:
-
-{{
-    "first_name": "First name only",
-    "last_name": "Last name only", 
-    "preferred_name": "Preferred/nickname if mentioned",
-    "email": "Email address",
-    "phone": "Phone number",
-    "address": "Full address if available",
-    "city": "City",
-    "state": "State/Province",
-    "country": "Country",
-    "linkedin_profile": "LinkedIn URL",
-    "current_job_title": "Current position title",
-    "current_employer": "Current company name",
-    "experience_years": 0,
-    "current_salary": "Current salary if mentioned",
-    "expected_salary": "Expected/desired salary if mentioned",
-    "education": [
-        {{
-            "degree": "Degree name",
-            "field_of_study": "Major/field of study",
-            "institution": "University/school name",
-            "graduation_year": "Year graduated",
-            "gpa": "GPA if mentioned",
-            "honors": "Any honors/distinctions"
-        }}
-    ],
-    "certifications": [
-        {{
-            "name": "Certification name",
-            "issuing_organization": "Organization that issued",
-            "issue_date": "Date issued",
-            "expiry_date": "Expiry date if applicable",
-            "credential_id": "ID if provided"
-        }}
-    ],
-    "skills": [
-        {{
-            "category": "Technical/Soft/Language/Tool",
-            "name": "Skill name",
-            "proficiency_level": "Beginner/Intermediate/Advanced/Expert"
-        }}
-    ],
-    "languages": [
-        {{
-            "language": "Language name",
-            "proficiency": "Native/Fluent/Conversational/Basic"
-        }}
-    ],
-    "work_authorization": "Authorized to work in [country] / Requires sponsorship / Not specified",
-    "job_history": [
-        {{
-            "company": "Company name",
-            "position": "Job title",
-            "start_date": "Start date",
-            "end_date": "End date or Present",
-            "location": "Work location",
-            "employment_type": "Full-time/Part-time/Contract/Intern",
-            "description": "Job description and achievements",
-            "key_achievements": ["Achievement 1", "Achievement 2"],
-            "technologies_used": ["Technology 1", "Technology 2"]
-        }}
-    ],
-    "availability_date": "Available from date",
-    "relocation_willingness": "Willing to relocate / Local candidates only / Not specified",
-    "remote_work_preference": "Remote only / Hybrid / On-site / Flexible / Not specified",
-    "professional_summary": "2-3 sentence professional summary highlighting key strengths",
-    "notable_achievements": [
-        {{
-            "achievement": "Achievement description",
-            "year": "Year achieved",
-            "organization": "Organization/company if applicable"
-        }}
-    ],
-    "references_available": true,
-    "portfolio_website": "Portfolio URL",
-    "github_profile": "GitHub URL",
-    "other_social_profiles": [
-        {{
-            "platform": "Platform name",
-            "url": "Profile URL"
-        }}
-    ]
-}}
-
-IMPORTANT INSTRUCTIONS:
-1. If information is not available, use null for strings, 0 for numbers, false for booleans, and empty arrays for lists
-2. Extract ALL skills mentioned (technical, programming languages, frameworks, tools, soft skills)
-3. For experience_years, calculate total years of professional experience
-4. Be very thorough in extracting job history with all details
-5. Return ONLY the JSON object, no additional text or formatting
-6. Ensure all dates are in a consistent format (YYYY-MM-DD or YYYY-MM or YYYY)
-7. Categorize skills appropriately (Technical, Soft, Language, Tool)
-8. Extract any social media profiles, portfolio links, or professional websites
-"""
-
-            logger.info("Sending comprehensive parsing prompt to Groq API")
-            response = await self.generate_completion(prompt)
-            logger.info(f"Groq API response received. Length: {len(response)} characters")
+            if not embedding or len(embedding) == 0:
+                logger.error("Empty embedding returned from API")
+                return None
+                
+            logger.info(f"Generated embedding with dimension: {len(embedding)}")
+            return embedding
             
-            # Parse and validate JSON response
-            try:
-                parsed_data = json.loads(response)
-                logger.info("Successfully parsed JSON response")
-                logger.debug(f"Parsed data keys: {list(parsed_data.keys())}")
-                
-                # Validate and clean the data
-                validated_data = self._validate_comprehensive_resume_data(parsed_data)
-                logger.info("Data validation completed")
-                
-                return validated_data
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON response: {e}")
-                logger.error(f"Response preview: {response[:500]}...")
-                
-                # Try to extract JSON from response
-                import re
-                json_match = re.search(r'\{.*\}', response, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group()
-                    parsed_data = json.loads(json_str)
-                    validated_data = self._validate_comprehensive_resume_data(parsed_data)
-                    logger.info("Successfully extracted and validated JSON from response")
-                    return validated_data
-                else:
-                    logger.error("No valid JSON found in response")
-                    return self._get_default_comprehensive_resume_data()
-                    
         except Exception as e:
-            logger.error(f"Error in comprehensive resume parsing: {str(e)}")
-            return self._get_default_comprehensive_resume_data()
-
-    def _validate_comprehensive_resume_data(self, data: Dict) -> Dict:
-        """Validate and clean comprehensive resume data"""
-        logger.info("Validating comprehensive resume data")
-        
-        # Get default structure
-        validated_data = self._get_default_comprehensive_resume_data()
-        
-        # Update with provided data
-        for key, value in data.items():
-            if key in validated_data:
-                validated_data[key] = value
-        
-        # Clean and validate specific fields
-        if validated_data.get('email') and '@' not in str(validated_data['email']):
-            validated_data['email'] = None
-            
-        if isinstance(validated_data.get('experience_years'), str):
-            try:
-                validated_data['experience_years'] = int(float(validated_data['experience_years']))
-            except (ValueError, TypeError):
-                validated_data['experience_years'] = 0
-                
-        # Ensure work authorization has a default
-        if not validated_data.get('work_authorization'):
-            validated_data['work_authorization'] = 'Not specified'
-            
-        logger.info("Data validation completed successfully")
-        return validated_data
-    
-    def _get_default_comprehensive_resume_data(self) -> Dict:
-        """Get default comprehensive resume data structure"""
-        return {
-            "first_name": None,
-            "last_name": None,
-            "preferred_name": None,
-            "email": None,
-            "phone": None,
-            "address": None,
-            "city": None,
-            "state": None,
-            "country": None,
-            "linkedin_profile": None,
-            "current_job_title": None,
-            "current_employer": None,
-            "experience_years": 0,
-            "current_salary": None,
-            "expected_salary": None,
-            "education": [],
-            "certifications": [],
-            "skills": [],
-            "languages": [],
-            "work_authorization": "Not specified",
-            "job_history": [],
-            "availability_date": None,
-            "relocation_willingness": "Not specified",
-            "remote_work_preference": "Not specified",
-            "professional_summary": None,
-            "notable_achievements": [],
-            "references_available": False,
-            "portfolio_website": None,
-            "github_profile": None,
-            "other_social_profiles": []
-        }
+            logger.error(f"Error in safe embedding generation: {str(e)}")
+            return None

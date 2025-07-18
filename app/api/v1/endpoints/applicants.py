@@ -183,8 +183,6 @@ async def enhance_applicant_profile(
         logger.error(f"Error enhancing applicant profile: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error enhancing applicant profile: {str(e)}")
 
-
-
 # Legacy endpoints for backward compatibility with existing resume APIs
 @router.get("/resumes", response_model=ResumeListResponse)
 async def list_resumes_legacy(
@@ -345,115 +343,310 @@ async def filter_applicants_by_experience(
         logger.error(f"Error filtering by experience: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error filtering by experience: {str(e)}")
 
+# UPDATED: Main candidate recommendation endpoint with min_similarity
 @router.get("/applicants/recommendations/{job_id}")
 async def get_applicant_recommendations_for_job(
     job_id: str,
     tenant_id: str = Query(..., description="Tenant ID"),
-    limit: int = Query(10, ge=1, le=50)
+    limit: int = Query(10, ge=1, le=50),
+    min_similarity: float = Query(0.0, ge=0.0, le=1.0, description="Minimum similarity score (0.0-1.0)")
 ):
     """Get applicant recommendations for a specific job"""
     try:
-        # Create vector service to search resumes directly
+        logger.info(f"Getting recommendations for job_id: {job_id}, tenant_id: {tenant_id}, min_similarity: {min_similarity}")
+        
+        # Helper function for safe entity field access
+        def get_entity_field(entity, field_name, default_value=""):
+            """Safely get field from entity"""
+            try:
+                if hasattr(entity, field_name):
+                    return getattr(entity, field_name)
+                elif hasattr(entity, 'get'):
+                    return entity.get(field_name, default_value)
+                else:
+                    return default_value
+            except:
+                return default_value
+        
+        # Create vector service to get job data first
         vector_service = VectorService()
         await vector_service.connect()
         
-        # Search all resumes (candidates) - we'll use empty filter since we don't have tenant filtering in resume collection
-        results = await vector_service.search_with_filter(
-            "resume_embeddings_mistral", 
-            query_embedding=None,  # No vector search, just get all
-            filter_expr="",  # No filter for now
-            limit=limit
+        # Step 1: Get the job embedding and metadata
+        logger.info(f"Step 1: Retrieving job data for job_id: {job_id}")
+        job_data = await vector_service.get_job_metadata(job_id, tenant_id)
+        
+        if not job_data:
+            logger.error(f"No job data found for job_id: {job_id}")
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        
+        logger.info(f"Found job data: {job_data.get('job_title', 'Unknown Title')}")
+        
+        # Step 2: Get job embedding from collection
+        if not vector_service.job_collection:
+            logger.error("Job collection not available")
+            raise HTTPException(status_code=500, detail="Job collection not available")
+        
+        # Load collection to memory
+        vector_service.job_collection.load()
+        
+        # Query to get job embedding
+        job_query_expr = f'job_id == "{job_id}" and tenant_id == "{tenant_id}"'
+        job_results = vector_service.job_collection.query(
+            expr=job_query_expr,
+            output_fields=["embedding", "job_id", "tenant_id"],
+            limit=1
         )
         
-        # Convert resume results to candidate format
+        if not job_results:
+            logger.error(f"No embedding found for job_id {job_id}")
+            raise HTTPException(status_code=404, detail="Job embedding not found")
+        
+        job_embedding = job_results[0].get('embedding')
+        if not job_embedding:
+            logger.error(f"Empty embedding for job_id {job_id}")
+            raise HTTPException(status_code=404, detail="Job embedding is empty")
+        
+        logger.info(f"Found job embedding with dimension: {len(job_embedding)}")
+        
+        # Step 3: Search for similar candidates using the job embedding
+        logger.info(f"Step 3: Searching for candidates using semantic similarity")
+        
+        if not vector_service.resume_collection:
+            logger.error("Resume collection not available")
+            raise HTTPException(status_code=500, detail="Resume collection not available")
+        
+        # Load resume collection
+        vector_service.resume_collection.load()
+        
+        # Perform semantic search on resume collection
+        search_params = {"metric_type": "COSINE", "params": {"nprobe": 10}}
+        
+        candidate_results = vector_service.resume_collection.search(
+            data=[job_embedding],
+            anns_field="embedding",
+            param=search_params,
+            limit=limit * 2,  # Get more results to filter by similarity threshold
+            output_fields=["vector_id", "candidate_id", "name", "skills", "location", "current_employer", "current_job_title"]
+        )
+        
+        # Step 4: Format the results with similarity filtering
         candidates = []
-        for result in results:
-            try:
-                # Create candidate response from resume data
-                candidate = {
-                    "candidate_id": result.get("candidate_id", "unknown"),
-                    "name": result.get("name", "N/A"),
-                    "current_job_title": result.get("current_job_title", "N/A"),
-                    "current_employer": result.get("current_employer", "N/A"),
-                    "location": result.get("location", "N/A"),
-                    "skills": result.get("skills", "").split(", ") if result.get("skills") else [],
-                    "email": "N/A",  # Not stored in resume collection
-                    "telephone": "N/A",  # Not stored in resume collection
-                }
-                candidates.append(candidate)
-            except Exception as e:
-                logger.warning(f"Error processing resume result: {str(e)}")
-                continue
+        for hits in candidate_results:
+            for hit in hits:
+                try:
+                    similarity_score = hit.score if hasattr(hit, 'score') else 0.0
+                    
+                    # ADDED: Filter by minimum similarity threshold
+                    if similarity_score < min_similarity:
+                        logger.debug(f"Skipping candidate {get_entity_field(hit.entity, 'candidate_id', 'unknown')} with similarity {similarity_score} < {min_similarity}")
+                        continue
+                    
+                    match_percentage = max(0, min(100, similarity_score * 100))
+
+                    entity = hit.entity
+                    candidate_id = get_entity_field(entity, "candidate_id", "unknown")
+                    name = get_entity_field(entity, "name", "N/A")
+                    current_job_title = get_entity_field(entity, "current_job_title", "N/A")
+                    current_employer = get_entity_field(entity, "current_employer", "N/A")
+                    location = get_entity_field(entity, "location", "N/A")
+                    skills_raw = get_entity_field(entity, "skills", "")
+                    skills = skills_raw.split(", ") if skills_raw else []
+
+                    candidate = {
+                        "candidate_id": candidate_id,
+                        "name": name,
+                        "current_job_title": current_job_title,
+                        "current_employer": current_employer,
+                        "location": location,
+                        "skills": skills,
+                        "email": "Contact via system",
+                        "telephone": "Contact via system",
+                        "match_score": round(match_percentage, 1),
+                        "similarity_score": round(similarity_score, 3)
+                    }
+                    candidates.append(candidate)
+                    
+                    # Stop if we have enough candidates
+                    if len(candidates) >= limit:
+                        break
+                        
+                except Exception as e:
+                    logger.warning(f"Error processing candidate result: {str(e)}")
+                    continue
+            
+            # Break outer loop if we have enough candidates
+            if len(candidates) >= limit:
+                break
+
+        logger.info(f"Successfully found {len(candidates)} candidate recommendations above similarity threshold {min_similarity}")
+
+        return {
+            "job_id": job_id,
+            "job_title": job_data.get('job_title', 'Unknown'),
+            "candidates_found": len(candidates),
+            "search_method": "semantic_similarity",
+            "min_similarity_used": min_similarity,
+            "candidates": candidates
+        }
         
-        return candidates
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting recommendations: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error getting recommendations: {str(e)}")
 
+# UPDATED: Applicant search endpoint with min_similarity
 @router.post("/applicants/search")
 async def search_applicants_endpoint(
     search_request: dict,
     tenant_id: str = Query(..., description="Tenant ID"),
-    limit: int = Query(10, ge=1, le=50)
+    limit: int = Query(10, ge=1, le=50),
+    min_similarity: float = Query(0.0, ge=0.0, le=1.0, description="Minimum similarity score (0.0-1.0)")
 ):
-    """Search applicants/candidates"""
+    """Search applicants/candidates with improved semantic search"""
     try:
-        # Create vector service to search resumes directly
+        logger.info(f"Searching applicants for tenant: {tenant_id}, min_similarity: {min_similarity}")
+        
+        # Helper function for safe entity field access
+        def get_entity_field(entity, field_name, default_value=""):
+            """Safely get field from entity"""
+            try:
+                if hasattr(entity, field_name):
+                    return getattr(entity, field_name)
+                elif hasattr(entity, 'get'):
+                    return entity.get(field_name, default_value)
+                else:
+                    return default_value
+            except:
+                return default_value
+        
+        # Create vector service
         vector_service = VectorService()
         await vector_service.connect()
         
-        # Search all resumes (candidates) - we'll use empty filter since we don't have tenant filtering in resume collection
-        results = await vector_service.search_with_filter(
-            "resume_embeddings_mistral", 
-            query_embedding=None,  # No vector search, just get all
-            filter_expr="",  # No filter for now
-            limit=limit
-        )
+        # Get search query from request
+        search_query = search_request.get('query', '')
         
-        # Convert resume results to candidate format
-        candidates = []
-        for result in results:
-            try:
-                # Create candidate response from resume data
-                candidate = {
-                    "candidate_id": result.get("candidate_id", "unknown"),
-                    "name": result.get("name", "N/A"),
-                    "current_job_title": result.get("current_job_title", "N/A"),
-                    "current_employer": result.get("current_employer", "N/A"),
-                    "location": result.get("location", "N/A"),
-                    "skills": result.get("skills", "").split(", ") if result.get("skills") else [],
-                    "email": "N/A",  # Not stored in resume collection
-                    "telephone": "N/A",  # Not stored in resume collection
-                }
-                candidates.append(candidate)
-            except Exception as e:
-                logger.warning(f"Error processing resume result: {str(e)}")
-                continue
+        if search_query and len(search_query.strip()) > 0:
+            # Generate query embedding using GroqService
+            groq_service = GroqService()
+            query_embedding = await groq_service.generate_embedding(search_query)
+            
+            # Perform semantic search
+            if not vector_service.resume_collection:
+                logger.error("Resume collection not available")
+                return []
+            
+            # Load collection
+            vector_service.resume_collection.load()
+            
+            # Search with embedding
+            search_params = {"metric_type": "COSINE", "params": {"nprobe": 10}}
+            
+            results = vector_service.resume_collection.search(
+                data=[query_embedding],
+                anns_field="embedding",
+                param=search_params,
+                limit=limit * 2,  # Get more results to filter by similarity threshold
+                output_fields=["vector_id", "candidate_id", "name", "skills", "location", "current_employer", "current_job_title"]
+            )
+            
+            # UPDATED: Format results with similarity filtering
+            candidates = []
+            for hits in results:
+                for hit in hits:
+                    try:
+                        similarity_score = hit.score if hasattr(hit, 'score') else 0.0
+                        
+                        # ADDED: Filter by minimum similarity threshold
+                        if similarity_score < min_similarity:
+                            logger.debug(f"Skipping candidate {get_entity_field(hit.entity, 'candidate_id', 'unknown')} with similarity {similarity_score} < {min_similarity}")
+                            continue
+                            
+                        match_percentage = max(0, min(100, similarity_score * 100))
+                        
+                        # Use the helper function instead of direct .get() calls
+                        entity = hit.entity
+                        candidate_id = get_entity_field(entity, "candidate_id", "unknown")
+                        name = get_entity_field(entity, "name", "N/A")
+                        current_job_title = get_entity_field(entity, "current_job_title", "N/A")
+                        current_employer = get_entity_field(entity, "current_employer", "N/A")
+                        location = get_entity_field(entity, "location", "N/A")
+                        skills_raw = get_entity_field(entity, "skills", "")
+                        skills = skills_raw.split(", ") if skills_raw else []
+                        
+                        candidate = {
+                            "candidate_id": candidate_id,
+                            "name": name,
+                            "current_job_title": current_job_title,
+                            "current_employer": current_employer,
+                            "location": location,
+                            "skills": skills,
+                            "email": "Contact via system",
+                            "telephone": "Contact via system",
+                            "match_score": round(match_percentage, 1),
+                            "similarity_score": round(similarity_score, 3)
+                        }
+                        candidates.append(candidate)
+                        
+                        # Stop if we have enough candidates
+                        if len(candidates) >= limit:
+                            break
+                        
+                    except Exception as e:
+                        logger.warning(f"Error processing search result: {str(e)}")
+                        continue
+                
+                # Break outer loop if we have enough candidates
+                if len(candidates) >= limit:
+                    break
+            
+            logger.info(f"Found {len(candidates)} candidates above similarity threshold {min_similarity}")
+            return candidates
         
-        return candidates
+        else:
+            # No query provided, return all candidates (limited)
+            # Note: For non-query searches, similarity threshold doesn't apply
+            if not vector_service.resume_collection:
+                logger.error("Resume collection not available")
+                return []
+            
+            # Load collection
+            vector_service.resume_collection.load()
+            
+            # Get all candidates with limit
+            results = vector_service.resume_collection.query(
+                expr="",  # Empty expression to get all
+                output_fields=["vector_id", "candidate_id", "name", "skills", "location", "current_employer", "current_job_title"],
+                limit=limit
+            )
+            
+            # Format results - this part is correct since it's using .query() not .search()
+            candidates = []
+            for result in results:
+                try:
+                    candidate = {
+                        "candidate_id": result.get("candidate_id", "unknown"),
+                        "name": result.get("name", "N/A"),
+                        "current_job_title": result.get("current_job_title", "N/A"),
+                        "current_employer": result.get("current_employer", "N/A"),
+                        "location": result.get("location", "N/A"),
+                        "skills": result.get("skills", "").split(", ") if result.get("skills") else [],
+                        "email": "Contact via system",
+                        "telephone": "Contact via system",
+                        "match_score": 0,  # No matching score for general listing
+                        "similarity_score": 0
+                    }
+                    candidates.append(candidate)
+                    
+                except Exception as e:
+                    logger.warning(f"Error processing result: {str(e)}")
+                    continue
+            
+            logger.info(f"Found {len(candidates)} candidates (no similarity filtering applied for non-query search)")
+            return candidates
         
     except Exception as e:
         logger.error(f"Error searching applicants: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error searching applicants: {str(e)}")
-
-# Legacy endpoint using the complex applicant service (commented out for now)
-# @router.get("/applicants/recommendations/{job_id}")
-# async def get_applicant_recommendations_for_job_legacy(
-#     job_id: str,
-#     tenant_id: str = Query(..., description="Tenant ID"),
-#     limit: int = Query(10, ge=1, le=50),
-#     applicant_service: ApplicantService = Depends(get_applicant_service)
-# ):
-#     """Get applicant recommendations for a specific job"""
-#     try:
-#         search_request = ApplicantSearchRequest(
-#             tenant_id=tenant_id,
-#             query=job_id,  # Basic implementation
-#             limit=limit
-#         )
-#         
-#         return await applicant_service.search_applicants(search_request)
-#     except Exception as e:
-#         logger.error(f"Error getting recommendations: {str(e)}")
-#         raise HTTPException(status_code=500, detail=f"Error getting recommendations: {str(e)}")

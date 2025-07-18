@@ -1,24 +1,24 @@
 # Core Framework
-fastapi==0.104.1
-uvicorn==0.24.0
-pydantic==2.4.2
+fastapi
+uvicorn
+pydantic
 
 # AI/ML - Using external APIs only (Groq + Mistral)
-groq==0.4.1
+groq
 
 # Database
-pymilvus==2.3.2
-psycopg2-binary==2.9.7
+pymilvus
+psycopg2-binary
 
 # File Processing
-PyPDF2==3.0.1
-python-docx==0.8.11
-python-multipart==0.0.6
+PyPDF2
+python-docx
+python-multipart
 
 # Utilities
-python-dotenv==1.0.0
-requests==2.31.0
-httpx==0.25.0
+python-dotenv
+requests
+httpx
 
 # Data Processing (lightweight)
-numpy==1.24.3
+numpy

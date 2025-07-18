@@ -65,6 +65,9 @@ class JobService:
                 # Generate embeddings for vector storage
                 embedding = await self.groq_service.generate_embedding(job_content)
                 
+                # Make sure embedding is included in metadata
+                processed_data['embedding'] = embedding  # Add this line before storage
+
                 # Store in vector database
                 embedding_id = await self.vector_service.store_job_embedding(
                     job_id, embedding, job_data.tenant_id, metadata=processed_data

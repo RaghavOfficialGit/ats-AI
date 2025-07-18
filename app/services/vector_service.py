@@ -11,6 +11,23 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 class VectorService:
+    async def log_all_job_ids(self):
+        """Log all job_ids and tenant_ids in the job collection for debugging."""
+        try:
+            await self.connect()
+            if not self.job_collection:
+                logger.error("Job collection not initialized")
+                return
+            results = self.job_collection.query(
+                expr=None,
+                output_fields=["job_id", "tenant_id"],
+                limit=1000
+            )
+            logger.info(f"All job_ids and tenant_ids in job collection:")
+            for result in results:
+                logger.info(f"job_id: {result.get('job_id')}, tenant_id: {result.get('tenant_id')}")
+        except Exception as e:
+            logger.error(f"Error logging all job_ids: {str(e)}")
     """Service for vector database operations using Milvus"""
     
     def __init__(self):
@@ -189,10 +206,15 @@ class VectorService:
                 [candidate_id],
                 [embedding],
                 [metadata.get('name', '')],
-                [', '.join(metadata.get('skills', []))],
+                [metadata.get('email', '')],
+                [metadata.get('telephone', '')],
+                [', '.join(metadata.get('skills', [])) if isinstance(metadata.get('skills', []), list) else metadata.get('skills', '')],
                 [metadata.get('location', '')],
                 [metadata.get('current_employer', '')],
-                [metadata.get('current_job_title', '')]
+                [metadata.get('current_job_title', '')],
+                [json.dumps(metadata.get('educational_qualifications', []), ensure_ascii=False) if isinstance(metadata.get('educational_qualifications', []), (list, dict)) else metadata.get('educational_qualifications', '')],
+                [json.dumps(metadata.get('experience_summary', []), ensure_ascii=False) if isinstance(metadata.get('experience_summary', []), (list, dict)) else metadata.get('experience_summary', '')],
+                [metadata.get('candidate_summary', '')],
             ]
             
             # Insert data
@@ -214,18 +236,18 @@ class VectorService:
         logger.info(f"🚀 embedding length: {len(embedding) if embedding else 'None'}")
         logger.info(f"🚀 tenant_id: {tenant_id}")
         logger.info(f"🚀 metadata: {metadata is not None}")
-        
+
         try:
             await self.connect()
-            
+
             if not self.job_collection:
                 logger.error("Job collection not initialized")
                 raise Exception("Job collection not available")
-            
+
             # Generate embedding if not provided
             if not embedding:
                 raise ValueError("Embedding is required")
-            
+
             # Prepare embedding vector
             vector = np.array(embedding, dtype=np.float32)
             if vector.shape[0] != settings.EMBEDDING_DIMENSION:
@@ -238,29 +260,29 @@ class VectorService:
                         raise Exception("GroqService not available for embedding generation")
                 else:
                     logger.warning(f"Embedding dimension mismatch. Expected {settings.EMBEDDING_DIMENSION}, got {vector.shape[0]}")
-            
+
             # Generate unique embedding ID
             embedding_id = str(uuid.uuid4())
-            
+
             # Prepare metadata with all job information
             job_metadata = metadata or {}
-            
+
             # Flatten complex metadata for storage
             flattened_metadata = self._flatten_metadata(job_metadata)
-            
+
             # Debug logging to see what was flattened
             logger.info(f"Original metadata keys: {list(job_metadata.keys())}")
             logger.info(f"Flattened metadata keys: {list(flattened_metadata.keys())}")
             logger.info(f"About to create data array with expected 21 fields...")
-            
+
             # Prepare data for insertion with proper None handling
             # Ensure all string fields are not None to avoid Milvus errors
             def safe_string(value):
                 return str(value) if value is not None else ''
-            
+
             def safe_int(value):
                 return int(value) if value is not None else 0
-            
+
             # Create data array for insertion - must match collection schema exactly
             data = [
                 [embedding_id],  # 1. id
@@ -285,11 +307,11 @@ class VectorService:
                 [safe_string(flattened_metadata.get('seo_job_description'))],   # 20. seo_job_description
                 [json.dumps(flattened_metadata or {})]  # 21. full_metadata
             ]
-            
+
             # CRITICAL DEBUG: Count and verify ALL data elements
             logger.error(f"🚨 CRITICAL DEBUG: About to insert {len(data)} fields")
             logger.error(f"🚨 Flattened metadata keys: {list(flattened_metadata.keys())}")
-            
+
             # Check for any empty lists that might be filtered
             actual_data = []
             for i, field_list in enumerate(data):
@@ -298,30 +320,37 @@ class VectorService:
                     logger.error(f"🚨 Field {i+1}: OK - {field_list[0]}")
                 else:
                     logger.error(f"🚨 Field {i+1}: PROBLEM - {field_list}")
-            
+
             logger.error(f"🚨 Final data array length: {len(actual_data)}")
-            
+
             # Use the verified data array
             data = actual_data
-            
+
             logger.info(f"🔍 DEBUG: Created data array with {len(data)} elements")
             logger.info(f"🔍 DEBUG: Collection expects 21 fields (22 total minus auto-generated pk)")
             logger.info(f"🔍 DEBUG: Data elements: {[len(field_list) for field_list in data]}")
-            
+
             # Debug logging to see what we're actually inserting
             logger.info(f"Inserting data with {len(data)} fields:")
             logger.info(f"Expected fields: 21 (collection has 22 including auto-generated pk)")
             for i, field_data in enumerate(data):
                 field_value = field_data[0] if field_data and len(field_data) > 0 else 'EMPTY_LIST'
                 logger.info(f"  Field {i+1}: {field_value}")
-            
+
             # Insert into collection
             insert_result = self.job_collection.insert(data)
             self.job_collection.flush()
-            
+
             logger.info(f"Successfully stored job embedding {embedding_id} for job {job_id}")
-            return embedding_id
-            
+
+            # Add this log line as requested
+            logger.info(f"Stored job {job_id} with embedding ID: {embedding_id}")
+
+            # Log all job_ids and tenant_ids after insertion for debugging
+            await self.log_all_job_ids()
+
+            return job_id
+
         except Exception as e:
             logger.error(f"Error storing job embedding: {str(e)}")
             raise Exception(f"Failed to store job embedding: {str(e)}")
@@ -364,38 +393,47 @@ class VectorService:
             return False
     
     async def get_job_metadata(self, job_id: str, tenant_id: str) -> Optional[Dict]:
-        """Retrieve job metadata from vector database"""
+        """Retrieve job metadata from vector database, with debug logs for job_id and tenant_id."""
         try:
             await self.connect()
-            
+
             if not self.job_collection:
+                logger.error("Job collection not initialized in get_job_metadata")
                 return None
-            
+
+            # Debug: log the job_id and tenant_id being queried
+            logger.info(f"[DEBUG] get_job_metadata: Querying for job_id='{job_id}', tenant_id='{tenant_id}'")
+
             # Query by job_id and tenant_id
             expr = f'job_id == "{job_id}" and tenant_id == "{tenant_id}"'
-            
+            logger.info(f"[DEBUG] get_job_metadata: Query expr: {expr}")
+
             results = self.job_collection.query(
                 expr=expr,
                 output_fields=["id", "job_id", "tenant_id", "full_metadata"],
                 limit=1
             )
-            
+
+            logger.info(f"[DEBUG] get_job_metadata: Query results: {results}")
+
             if results:
                 metadata_str = results[0].get('full_metadata', '{}')
+                logger.info(f"[DEBUG] get_job_metadata: Found metadata for job_id={job_id}, tenant_id={tenant_id}")
                 return json.loads(metadata_str) if metadata_str else None
-            
+
+            logger.warning(f"[DEBUG] get_job_metadata: No results found for job_id={job_id}, tenant_id={tenant_id}")
             return None
-            
+
         except Exception as e:
             logger.error(f"Error retrieving job metadata: {str(e)}")
             return None
     
     async def search_with_filter(self, collection_name: str, query_embedding: Optional[List[float]] = None, 
                                filter_expr: str = "", limit: int = 100) -> List[Dict]:
-        """Generic search method with filtering for any collection"""
+        """Generic search method with filtering for any collection. Always performs vector search if query_embedding is provided. For recommendations, always use vector search to ensure scores are present."""
         try:
             await self.connect()
-            
+
             # Get the appropriate collection
             if collection_name == "applicants" or collection_name == "resume_embeddings_mistral":
                 collection = self.resume_collection
@@ -404,103 +442,65 @@ class VectorService:
             else:
                 logger.error(f"Unknown collection: {collection_name}")
                 return []
-            
+
             if not collection:
                 logger.warning(f"Collection {collection_name} not initialized")
                 return []
-            
+
             # Load collection to memory for search
             collection.load()
-            
-            if query_embedding:
-                # Vector search with filtering
-                search_vector = np.array(query_embedding, dtype=np.float32)
-                search_params = {"metric_type": "COSINE", "params": {"nprobe": 10}}
-                
-                results = collection.search(
-                    data=[search_vector.tolist()],
-                    anns_field="embedding",
-                    param=search_params,
-                    limit=limit,
-                    expr=filter_expr if filter_expr else None,
-                    output_fields=["*"]  # Get all fields
-                )
-                
-                # Process results
-                result_list = []
-                for hits in results:
-                    for hit in hits:
-                        try:
-                            # Convert hit to dictionary
-                            result_dict = {}
-                            
-                            # Add score
-                            result_dict['score'] = hit.score if hasattr(hit, 'score') else 0.0
-                            
-                            # Add all entity fields
-                            if hasattr(hit, 'entity'):
-                                # Get field names from schema  
-                                field_names = [field.name for field in collection.schema.fields]
-                                for field_name in field_names:
-                                    if field_name in hit.entity:
-                                        value = hit.entity[field_name]
-                                        # Handle JSON fields
-                                        if isinstance(value, str) and field_name in ['skills', 'full_metadata']:
-                                            try:
-                                                result_dict[field_name] = json.loads(value)
-                                            except (json.JSONDecodeError, TypeError):
-                                                result_dict[field_name] = value
-                                        else:
-                                            result_dict[field_name] = value
-                            
-                            result_list.append(result_dict)
-                            
-                        except Exception as e:
-                            logger.error(f"Error processing search result: {str(e)}")
-                            continue
-                
-                return result_list
-            
-            else:
-                # Filter-only search (no vector query)
-                query_expr = filter_expr if filter_expr else ""
-                
-                # Use query() for filtering without vector search
-                query_results = collection.query(
-                    expr=query_expr,
-                    output_fields=["*"],
-                    limit=limit
-                )
-                
-                # Process query results
-                result_list = []
-                for entity in query_results:
+
+            if not query_embedding:
+                logger.error("Vector search requires a query_embedding. For recommendations, always provide an embedding.")
+                return []
+
+            # Vector search with filtering
+            search_vector = np.array(query_embedding, dtype=np.float32)
+            search_params = {"metric_type": "COSINE", "params": {"nprobe": 10}}
+
+            results = collection.search(
+                data=[search_vector.tolist()],
+                anns_field="embedding",
+                param=search_params,
+                limit=limit,
+                expr=filter_expr if filter_expr else None,
+                output_fields=["*"]  # Get all fields
+            )
+
+            # Process results
+            result_list = []
+            for hits in results:
+                for hit in hits:
                     try:
+                        # Convert hit to dictionary
                         result_dict = {}
-                        
+
+                        # Add score
+                        result_dict['score'] = hit.score if hasattr(hit, 'score') else 0.0
+
                         # Add all entity fields
-                        # Get field names from schema
-                        field_names = [field.name for field in collection.schema.fields]
-                        for field_name in field_names:
-                            if field_name in entity:
-                                value = entity[field_name]
-                                # Handle JSON fields
-                                if isinstance(value, str) and field_name in ['skills', 'full_metadata']:
-                                    try:
-                                        result_dict[field_name] = json.loads(value)
-                                    except (json.JSONDecodeError, TypeError):
+                        if hasattr(hit, 'entity'):
+                            # Get field names from schema  
+                            field_names = [field.name for field in collection.schema.fields]
+                            for field_name in field_names:
+                                if field_name in hit.entity:
+                                    value = hit.entity[field_name]
+                                    # Handle JSON fields
+                                    if isinstance(value, str) and field_name in ['skills', 'full_metadata']:
+                                        try:
+                                            result_dict[field_name] = json.loads(value)
+                                        except (json.JSONDecodeError, TypeError):
+                                            result_dict[field_name] = value
+                                    else:
                                         result_dict[field_name] = value
-                                else:
-                                    result_dict[field_name] = value
-                        
+
                         result_list.append(result_dict)
-                        
+
                     except Exception as e:
-                        logger.error(f"Error processing query result: {str(e)}")
+                        logger.error(f"Error processing search result: {str(e)}")
                         continue
-                
-                return result_list
-                
+
+            return result_list
         except Exception as e:
             logger.error(f"Error in search_with_filter: {str(e)}")
             return []
@@ -823,3 +823,14 @@ class VectorService:
                     flattened[key] = value
         
         return flattened
+
+    async def job_exists(self, job_id: str, tenant_id: str) -> bool:
+        """Check if a job exists in the job collection by job_id and tenant_id."""
+        try:
+            await self.connect()
+            expr = f'job_id == "{job_id}" and tenant_id == "{tenant_id}"'
+            result = self.job_collection.query(expr, output_fields=["job_id"], limit=1)
+            return bool(result)
+        except Exception as e:
+            logger.error(f"Error checking job existence: {str(e)}")
+            return False

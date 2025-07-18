@@ -790,16 +790,20 @@ def display_candidate_search_results(results: Dict[str, Any]):
                 st.write(f"**📍 Location:** {location}")
             
             with col2:
-                # Match score if available
-                if 'score' in candidate:
-                    score = round(candidate['score'] * 100, 1)
+                # Always show match and similarity score metrics if 'score' key exists (even if 0.0)
+                score_val = candidate.get('score', None)
+                if score_val is not None:
+                    score = round(score_val * 100, 1)
+                    similarity_score = round(score_val, 4)
                     st.metric("Match Score", f"{score}%")
-                
+                    st.metric("Similarity Score", f"{similarity_score}")
+                else:
+                    st.metric("Match Score", "N/A")
+                    st.metric("Similarity Score", "N/A")
                 # Experience count
                 experience = candidate.get('experience_summary', [])
                 if experience:
                     st.metric("Experience", f"{len(experience)} roles")
-                
                 # Education count
                 education = candidate.get('educational_qualifications', [])
                 if education:
@@ -865,6 +869,7 @@ def display_candidate_search_results(results: Dict[str, Any]):
                     if 'processing_status' in candidate:
                         st.write(f"**Status:** {candidate['processing_status']}")
             
+            # Remove duplicate similarity score at the bottom (now shown as metric above)
             st.markdown("---")
 
 def display_job_search_results(results: Dict[str, Any]):
@@ -1118,7 +1123,7 @@ def display_job_results(results: Dict[str, Any]):
         for resp in responsibilities:
             st.write(f"• {resp}")
     else:
-        st.write("No specific responsibilities extracted")
+        st.write("No benefits information extracted")
     
     # Benefits
     st.subheader("🎁 Benefits")

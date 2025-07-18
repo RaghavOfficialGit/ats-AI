@@ -14,6 +14,7 @@ from app.models.applicant import (
 from app.services.vector_service import VectorService
 from app.services.groq_service import GroqService
 import logging
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -748,3 +749,53 @@ class ApplicantService:
         except Exception as e:
             logger.error(f"Error converting metadata to response: {str(e)}")
             raise
+
+    async def get_recommendations(self, job_id: str, tenant_id: str, limit: int = 10):
+        """
+        Get recommended applicants for a given job using job embedding similarity.
+        """
+        try:
+            # Get job metadata which contains the embedding
+            job_data = await self.vector_service.get_job_metadata(job_id, tenant_id)
+            if not job_data:
+                logger.error(f"No job metadata found for job_id {job_id}")
+                raise HTTPException(status_code=404, detail="Job not found")
+            
+            # Extract embedding from metadata
+            job_embedding = job_data.get("embedding")
+            if not job_embedding:
+                logger.error(f"No embedding found in job metadata for job_id {job_id}")
+                raise HTTPException(status_code=404, detail="Job embedding not found")
+            
+            # Build filter expression
+            filter_expr = f'tenant_id == "{tenant_id}"'
+            
+            # Search resumes using job embedding
+            results = await self.vector_service.search_with_filter(
+                self.collection_name, 
+                job_embedding, 
+                filter_expr, 
+                limit=limit
+            )
+            
+            # Process and return results
+            return await self._format_recommendations(results)
+            
+        except Exception as e:
+            logger.error(f"Error getting recommendations: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    async def _format_recommendations(self, results: List[Dict[str, Any]]) -> List[ApplicantResponse]:
+        """Format raw search results into structured recommendations"""
+        recommendations = []
+        
+        for result in results:
+            try:
+                # Convert result to ApplicantResponse
+                applicant = await self._metadata_to_response(result)
+                recommendations.append(applicant)
+            except Exception as e:
+                logger.warning(f"Error formatting recommendation: {str(e)}")
+                continue
+        
+        return recommendations
