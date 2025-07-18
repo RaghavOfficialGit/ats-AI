@@ -135,7 +135,8 @@ async def search_jobs(
     priority: Optional[str] = Query(None),
     min_experience: Optional[int] = Query(None),
     max_experience: Optional[int] = Query(None),
-    limit: int = Query(10, ge=1, le=100)
+    limit: int = Query(10, ge=1, le=100),
+    min_similarity: float = Query(0.5, ge=0.0, le=1.0, description="Minimum similarity score (0.0-1.0)")
 ):
     """Search jobs using vector similarity with optional filters"""
     try:
@@ -156,8 +157,31 @@ async def search_jobs(
         if max_experience is not None:
             filters['max_experience'] = max_experience
         
-        logger.info(f"Searching jobs for tenant: {tenant_id} with query: {query}")
+        logger.info(f"Searching jobs for tenant: {tenant_id} with query: {query} and similarity threshold: {min_similarity}")
+        
+        # FIXED: Call the method with correct arguments (removed min_similarity from here)
+        # The JobService.search_jobs method signature should be: 
+        # search_jobs(tenant_id, query, filters=None, limit=10)
         result = await job_service.search_jobs(tenant_id, query, filters, limit)
+        
+        # Apply similarity filtering at the API level if needed
+        if min_similarity > 0.0 and result:
+            # Filter results by similarity score if the results have score information
+            filtered_results = []
+            for job in result:
+                # Check if job has similarity score and filter
+                if hasattr(job, 'similarity_score'):
+                    if job.similarity_score >= min_similarity:
+                        filtered_results.append(job)
+                elif hasattr(job, 'score'):
+                    if job.score >= min_similarity:
+                        filtered_results.append(job)
+                else:
+                    # If no score available, include the job
+                    filtered_results.append(job)
+            
+            result = filtered_results[:limit]
+        
         return result
     except Exception as e:
         logger.error(f"Error searching jobs: {str(e)}")

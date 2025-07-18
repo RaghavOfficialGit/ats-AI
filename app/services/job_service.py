@@ -122,6 +122,8 @@ class JobService:
             logger.error(f"Error getting job {job_id}: {str(e)}")
             raise
 
+        # Key part of job_service.py that needs to be fixed
+
     async def search_jobs(self, tenant_id: str, query: str, filters: Optional[Dict] = None, limit: int = 10) -> List[JobResponse]:
         """Search jobs using vector similarity and filters"""
         try:
@@ -136,6 +138,11 @@ class JobService:
             jobs = []
             for job_data, score in similar_jobs:
                 job = JobResponse(**job_data)
+                # Add similarity score to the job if possible
+                if hasattr(job, 'similarity_score'):
+                    job.similarity_score = score
+                elif hasattr(job, 'score'):
+                    job.score = score
                 jobs.append(job)
             
             logger.info(f"Found {len(jobs)} jobs matching query for tenant {tenant_id}")
