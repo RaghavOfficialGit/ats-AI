@@ -22,3 +22,9 @@ httpx
 
 # Data Processing (lightweight)
 numpy
+Pillow
+pydantic_settings
+
+
+pytesseract
+pymupdf
