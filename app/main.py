@@ -5,6 +5,9 @@ import os
 import logging
 from dotenv import load_dotenv
 import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.api.v1.api import api_router
 from app.core.config import settings
@@ -84,5 +87,4 @@ async def global_exception_handler(request: Request, exc: Exception):
 def handler(request, context):
     return app(request, context)
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
